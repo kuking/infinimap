@@ -195,9 +195,19 @@ func (m *im[K, V]) Values() <-chan V {
 }
 
 func (m *im[K, V]) Each(f func(K, V) (cont bool)) error {
-	for bucket := uint32(0); bucket < m.buckets; bucket++ {
-		lo, hi, ofs := m.readBucket(bucket)
-		if lo != 0 && hi != 0 && ofs != 0 {
+	return m.eachWithOfs(func(k K, v V, u uint64) (cont bool) {
+		return f(k, v)
+	})
+}
+
+func (m *im[K, V]) eachWithOfs(f func(K, V, uint64) (cont bool)) error {
+	ofs := uint64(OFS_FIRST_RECORD) + uint64(BUCKET_SIZE)*uint64(m.buckets)
+	lastOfs := m.getFreeNextByte()
+	for {
+		if ofs >= lastOfs {
+			return nil
+		}
+		if m.isPopulatedRecord(ofs) {
 			k, err := m.readRecordKey(ofs)
 			if err != nil {
 				return err
@@ -206,13 +216,47 @@ func (m *im[K, V]) Each(f func(K, V) (cont bool)) error {
 			if err != nil {
 				return err
 			}
-			if !f(k, v) {
-				return nil // finish if function returns false
+			if !f(k, v, ofs) {
+				return nil
 			}
 		}
+		newOfs := m.nextRecordOfs(ofs)
+		if newOfs == ofs || newOfs == lastOfs {
+			return nil
+		}
+		ofs = newOfs
 	}
-	return nil
 }
+
+func (m *im[K, V]) Reindex() error {
+	m.resetClogRatio()
+
+	// clean all the buckets
+	for bucket := uint32(0); bucket < m.buckets; bucket++ {
+		m.resetBucket(bucket)
+	}
+
+	return m.eachWithOfs(func(k K, v V, ofs uint64) (cont bool) {
+		lo, hi, err := m.resolveHash(k)
+		if err != nil {
+			log.Println("failure re-indexing infinimap", err)
+			return false
+		}
+		visitedBuckets := uint32(0)
+		bucket := m.calBucketFromHash(lo, hi)
+		for {
+			blo, bhi, bofs := m.readBucket(bucket)
+			if m.isNeverUsedBucket(blo, bhi, bofs) {
+				m.writeBucket(bucket, lo, hi, ofs)
+				m.updateClogRatio(visitedBuckets)
+				return true
+			}
+			bucket = (bucket + 1) % m.buckets
+			visitedBuckets++
+		}
+	})
+}
+
 func (m *im[K, V]) Compact() error {
 	panic(errors.New("not implemented"))
 }

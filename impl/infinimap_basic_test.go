@@ -149,7 +149,7 @@ func TestBasicDrill(t *testing.T) {
 
 	t0 = time.Now()
 	c := 0
-	for _ = range imap.Keys() {
+	for range imap.Keys() {
 		c++
 	}
 	assert.Equal(t, int(records), c)
@@ -159,7 +159,7 @@ func TestBasicDrill(t *testing.T) {
 
 	t0 = time.Now()
 	c = 0
-	for _ = range imap.Values() {
+	for range imap.Values() {
 		c++
 	}
 	assert.Equal(t, int(records), c)
@@ -168,7 +168,7 @@ func TestBasicDrill(t *testing.T) {
 		elapsed.Truncate(time.Microsecond), float64(records)/1000.0/1000.0, float64(records)/float64(elapsed.Seconds())/1000.0)
 }
 
-func TestBasicCollisions(t *testing.T) {
+func TestBasicCollisionsAndReindexing(t *testing.T) {
 	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
 	defer deferredCleanup(tempFile)
 
@@ -220,7 +220,32 @@ func TestBasicCollisions(t *testing.T) {
 	}
 
 	assert.Equal(t, 0xff, imap.ClogRatio()) // absolutely clog
+	assert.Equal(t, 101_000, imap.StatsInserts())
+	assert.Equal(t, 100_000, imap.StatsDeletes())
+	assert.Equal(t, 0, imap.StatsUpdates())
+	assert.Equal(t, 1000, imap.Count())
 
+	count := 0
+	err = imap.Each(func(u uint64, s string) (cont bool) {
+		assert.Equal(t, fmt.Sprintf("Val %d", u), s)
+		count++
+		return true
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 1000, count)
+
+	// re-indexed
+	log.Println("reindexing")
+	prevClogRatio := imap.ClogRatio()
+	assert.NoError(t, imap.Reindex())
+	assert.True(t, prevClogRatio > imap.ClogRatio() && imap.ClogRatio() > 0)
+
+	// all should be there
+	count = 0
+	for _ = range imap.Values() {
+		count++
+	}
+	assert.Equal(t, 1000, count)
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

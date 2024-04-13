@@ -25,6 +25,8 @@ const (
 
 	BUCKET_SIZE = (128 + 64) / 8
 
+	OFS_FIRST_RECORD = OFS_FIRST_BUCKET // + m.buckets() * BUCKET_SIZE
+
 	RECORD_LO_HASH    = 0
 	RECORD_HI_HASH    = RECORD_LO_HASH + 8
 	RECORD_KEY_SIZE   = RECORD_HI_HASH + 8
@@ -66,7 +68,7 @@ func CreateInfinimap[K comparable, V any](path string, cfg infinimap.CreateParam
 	mem[OFS_HASHING_ALGO] = byte(im.hashing)
 	mem[OFS_COMPRESSION_ALGO] = byte(im.compression)
 	binary.LittleEndian.PutUint32(mem[OFS_BUCKETS:], im.buckets)
-	binary.LittleEndian.PutUint64(mem[OFS_NEXT_FREE_BYTE:], uint64(OFS_FIRST_BUCKET)+uint64(BUCKET_SIZE)*uint64(im.buckets))
+	binary.LittleEndian.PutUint64(mem[OFS_NEXT_FREE_BYTE:], uint64(OFS_FIRST_RECORD)+uint64(BUCKET_SIZE)*uint64(im.buckets))
 	binary.LittleEndian.PutUint64(mem[OFS_INSERTS:], 0)
 	binary.LittleEndian.PutUint64(mem[OFS_DELETES:], 0)
 	binary.LittleEndian.PutUint64(mem[OFS_COUNT:], 0)
@@ -128,6 +130,10 @@ func (m *im[K, V]) eraseBucket(bucket uint32) {
 	m.writeBucket(bucket, THOMBSTONE_LO, THOMBSTONE_HI, THOMBSTONE_OFS)
 }
 
+func (m *im[K, V]) resetBucket(bucket uint32) {
+	m.writeBucket(bucket, 0, 0, 0)
+}
+
 func (m *im[K, V]) isNeverUsedBucket(lo, hi, ofs uint64) bool {
 	return lo == 0 && hi == 0 && ofs == 0
 }
@@ -185,11 +191,31 @@ func (m *im[K, V]) readRecordValue(ofs uint64) (V, error) {
 }
 
 func (m *im[K, V]) eraseRecord(ofs uint64) {
+	// we leave keySize and valueSize there so we can calculate next record
 	keySize := binary.LittleEndian.Uint32(m.mem[ofs+RECORD_KEY_SIZE:])
 	valueSize := binary.LittleEndian.Uint32(m.mem[ofs+RECORD_VALUE_SIZE:])
-	for o := ofs; o < ofs+RECORD_VALUE+uint64(keySize)+uint64(valueSize); o++ {
+	for o := ofs + RECORD_KEY; o < ofs+RECORD_VALUE+uint64(keySize)+uint64(valueSize); o++ {
 		m.mem[o] = 0 //XXX this needs to be efficient
 	}
+	binary.LittleEndian.PutUint64(m.mem[ofs+RECORD_LO_HASH:], THOMBSTONE_LO)
+	binary.LittleEndian.PutUint64(m.mem[ofs+RECORD_HI_HASH:], THOMBSTONE_HI)
+}
+
+func (m *im[K, V]) isPopulatedRecord(ofs uint64) bool {
+	lo := binary.LittleEndian.Uint64(m.mem[ofs+RECORD_LO_HASH:])
+	hi := binary.LittleEndian.Uint64(m.mem[ofs+RECORD_HI_HASH:])
+	keySize := binary.LittleEndian.Uint32(m.mem[ofs+RECORD_KEY_SIZE:])
+	valueSize := binary.LittleEndian.Uint32(m.mem[ofs+RECORD_VALUE_SIZE:])
+	return keySize > 0 && valueSize > 0 && lo != THOMBSTONE_LO && hi != THOMBSTONE_HI
+}
+
+func (m *im[K, V]) nextRecordOfs(ofs uint64) uint64 {
+	keySize := binary.LittleEndian.Uint32(m.mem[ofs+RECORD_KEY_SIZE:])
+	valueSize := binary.LittleEndian.Uint32(m.mem[ofs+RECORD_VALUE_SIZE:])
+	if keySize == 0 || valueSize == 0 {
+		return ofs
+	}
+	return ofs + RECORD_VALUE + uint64(keySize) + uint64(valueSize)
 }
 
 // --------- Counters ----------------------------------------------------------------------------------------------------------------------------------------

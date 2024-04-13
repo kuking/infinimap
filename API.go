@@ -20,6 +20,7 @@ type InfiniMap[K comparable, V any] interface {
 
 	CountU64() uint64
 	ClogRatio() uint8
+	Reindex() error
 
 	Compact() error
 	Sync() error

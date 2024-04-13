@@ -27,6 +27,10 @@ const (
 	RECORD_VALUE_SIZE = RECORD_KEY_SIZE + 4
 	RECORD_KEY        = RECORD_VALUE_SIZE + 4
 	RECORD_VALUE      = RECORD_KEY // needs the keysized to be added
+
+	THOMBSTONE_LO  = 1
+	THOMBSTONE_HI  = 2
+	THOMBSTONE_OFS = 3
 )
 
 func CreateInfinimap[K comparable, V any](path string, cfg infinimap.CreateParameters) (infinimap.InfiniMap[K, V], error) {
@@ -117,7 +121,19 @@ func (m *im[K, V]) writeBucket(bucket uint32, lo, hi, offset uint64) {
 }
 
 func (m *im[K, V]) eraseBucket(bucket uint32) {
-	m.writeBucket(bucket, 0, 0, 0)
+	m.writeBucket(bucket, THOMBSTONE_LO, THOMBSTONE_HI, THOMBSTONE_OFS)
+}
+
+func (m *im[K, V]) isNeverUsedBucket(lo, hi, ofs uint64) bool {
+	return lo == 0 && hi == 0 && ofs == 0
+}
+
+func (m *im[K, V]) isTombstoneBucket(lo, hi, ofs uint64) bool {
+	return lo == THOMBSTONE_LO && hi == THOMBSTONE_HI && ofs == THOMBSTONE_OFS
+}
+
+func (m *im[K, V]) isUsedBucket(lo, hi, ofs uint64) bool {
+	return !m.isNeverUsedBucket(lo, hi, ofs) && !m.isTombstoneBucket(lo, hi, ofs)
 }
 
 func (m *im[K, V]) getFreeNextByte() uint64 {
@@ -150,11 +166,11 @@ func (m *im[K, V]) writeRecord(ofs uint64, lo uint64, hi uint64, k K, v V) (size
 	return RECORD_VALUE + uint64(keyLength) + uint64(ValueLength), nil
 }
 
-func (m *im[K, V]) isSlotForKey(ofs uint64, lo uint64, hi uint64, k K) bool {
-	if binary.LittleEndian.Uint64(m.mem[ofs:]) != lo || binary.LittleEndian.Uint64(m.mem[ofs+8:]) != hi {
+func (m *im[K, V]) isRecordForKey(ofs uint64, lo uint64, hi uint64, k K) bool {
+	if binary.LittleEndian.Uint64(m.mem[ofs+RECORD_LO_HASH:]) != lo || binary.LittleEndian.Uint64(m.mem[ofs+RECORD_HI_HASH:]) != hi {
 		return false
 	}
-	kv, err := m.seraliser.Read(m.mem[ofs+24:], reflect.TypeFor[K]().Kind())
+	kv, err := m.seraliser.Read(m.mem[ofs+RECORD_KEY:], reflect.TypeFor[K]().Kind())
 	if err == nil {
 		return kv.(K) == k
 	}

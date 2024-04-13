@@ -1,9 +1,11 @@
 package impl
 
 import (
+	"fmt"
 	"github.com/kuking/infinimap"
 	"github.com/zeebo/assert"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"testing"
@@ -76,7 +78,7 @@ func TestBasicDrill(t *testing.T) {
 
 	records := uint64(1_000_000)
 
-	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(int(records*2)))
+	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(int(records*10)))
 	assert.NoError(t, err)
 
 	t0 := time.Now()
@@ -117,6 +119,59 @@ func TestBasicDrill(t *testing.T) {
 	elapsed = time.Since(t0)
 	log.Printf("Took %v to read the values of %.1fM records or %.2fK values/s",
 		elapsed.Truncate(time.Microsecond), float64(records)/1000.0/1000.0, float64(records)/float64(elapsed.Seconds())/1000.0)
+}
+
+func TestBasicCollisions(t *testing.T) {
+	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
+	defer deferredCleanup(tempFile)
+
+	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(1100))
+	assert.NoError(t, err)
+
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	var keys []uint64
+	gomap := map[uint64]string{}
+
+	for i := uint64(0); i < 1000; i++ {
+		k := rnd.Uint64()
+		v := fmt.Sprintf("Val %d", k)
+		_, _, err := imap.Put(k, v)
+		assert.NoError(t, err)
+		gomap[k] = v
+		keys = append(keys, k)
+	}
+
+	for i := 0; i < 1_000_000; i++ {
+		if len(keys) == 0 {
+			continue
+		}
+		keyIndex := rnd.Intn(len(keys))
+		key := keys[keyIndex]
+
+		// println(i, key)
+
+		if val, found := imap.Get(key); found {
+			// asserts has the expected value
+			expectedVal := fmt.Sprintf("Val %d", key)
+			assert.Equal(t, expectedVal, val)
+			assert.Equal(t, expectedVal, gomap[key])
+
+			// deletes
+			assert.True(t, imap.Delete(key))
+			delete(gomap, key)
+			keys = append(keys[:keyIndex], keys[keyIndex+1:]...)
+
+			// Add a new random
+			newKey := rnd.Uint64()
+			newValue := fmt.Sprintf("Val %d", newKey)
+			_, _, err = imap.Put(newKey, newValue)
+			assert.NoError(t, err)
+			gomap[newKey] = newValue
+			keys = append(keys, newKey)
+		}
+	}
+
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

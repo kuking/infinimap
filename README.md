@@ -44,5 +44,4 @@ Scale to Hundreds of Terabytes with This Efficient, Persistent Zero-Copy Map.
 
 # TODO
 
-- https://github.com/go-faster/city?
 - https://github.com/peterbourgon/diskv

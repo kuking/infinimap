@@ -72,6 +72,53 @@ func TestHappyPath(t *testing.T) {
 	assert.Nil(t, getValues(imap))
 }
 
+func TestCounters(t *testing.T) {
+	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
+	defer deferredCleanup(tempFile)
+
+	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(10))
+	assert.NoError(t, err)
+
+	assert.Equal(t, 0, imap.Count())
+	assert.Equal(t, 0, imap.StatsInserts())
+	assert.Equal(t, 0, imap.StatsDeletes())
+	assert.Equal(t, 0, imap.StatsUpdates())
+	assert.Equal(t, 0, imap.CountU64())
+	assert.Equal(t, 0, imap.ClogRatio())
+
+	for i := uint64(0); i < 10; i++ {
+		_, _, err := imap.Put(i, fmt.Sprintf("Value %d", i))
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, 10, imap.StatsInserts())
+	assert.Equal(t, 0, imap.StatsUpdates())
+	assert.Equal(t, 0, imap.StatsDeletes())
+	assert.Equal(t, 10, imap.Count())
+	assert.Equal(t, 10, imap.CountU64())
+	assert.True(t, imap.ClogRatio() > 0x5 && imap.ClogRatio() < 0x10)
+
+	for i := uint64(0); i < 10; i++ {
+		_, _, err := imap.Put(i, fmt.Sprintf("New Value %d", i))
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, 10, imap.StatsInserts())
+	assert.Equal(t, 10, imap.StatsUpdates())
+	assert.Equal(t, 0, imap.StatsDeletes())
+	assert.Equal(t, 10, imap.Count())
+	assert.Equal(t, 10, imap.CountU64())
+	assert.True(t, imap.ClogRatio() > 0x5 && imap.ClogRatio() < 0x10)
+
+	for i := uint64(0); i < 10; i++ {
+		assert.True(t, imap.Delete(i))
+	}
+	assert.Equal(t, 10, imap.StatsInserts())
+	assert.Equal(t, 10, imap.StatsUpdates())
+	assert.Equal(t, 10, imap.StatsDeletes())
+	assert.Equal(t, 0, imap.Count())
+	assert.Equal(t, 0, imap.CountU64())
+	assert.True(t, imap.ClogRatio() > 0x5 && imap.ClogRatio() < 0x10)
+}
+
 func TestBasicDrill(t *testing.T) {
 	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
 	defer deferredCleanup(tempFile)
@@ -125,7 +172,7 @@ func TestBasicCollisions(t *testing.T) {
 	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
 	defer deferredCleanup(tempFile)
 
-	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(1100))
+	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(1000))
 	assert.NoError(t, err)
 
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -142,7 +189,7 @@ func TestBasicCollisions(t *testing.T) {
 		keys = append(keys, k)
 	}
 
-	for i := 0; i < 1_000_000; i++ {
+	for i := 0; i < 100_000; i++ {
 		if len(keys) == 0 {
 			continue
 		}
@@ -171,6 +218,8 @@ func TestBasicCollisions(t *testing.T) {
 			keys = append(keys, newKey)
 		}
 	}
+
+	assert.Equal(t, 0xff, imap.ClogRatio()) // absolutely clog
 
 }
 

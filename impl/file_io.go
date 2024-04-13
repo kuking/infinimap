@@ -15,11 +15,15 @@ const (
 	OFS_COMPRESSION_ALGO int = OFS_HASHING_ALGO + 1
 	OFS_BUCKETS          int = OFS_COMPRESSION_ALGO + 1
 	OFS_NEXT_FREE_BYTE       = OFS_BUCKETS + 4
-	OFS_INSERTS              = OFS_NEXT_FREE_BYTE + 8
-	OFS_DELETES              = OFS_INSERTS + 8
-	OFS_COUNT                = OFS_DELETES + 8
-	OFS_FIRST_BUCKET         = OFS_COUNT + 8
-	BUCKET_SIZE              = (128 + 64) / 8
+
+	OFS_INSERTS      = OFS_NEXT_FREE_BYTE + 8
+	OFS_UPDATES      = OFS_INSERTS + 8
+	OFS_DELETES      = OFS_UPDATES + 8
+	OFS_COUNT        = OFS_DELETES + 8
+	OFS_CLOG_RATIO   = OFS_COUNT + 8
+	OFS_FIRST_BUCKET = OFS_CLOG_RATIO + 1 // what if 1K instead of just after last field?
+
+	BUCKET_SIZE = (128 + 64) / 8
 
 	RECORD_LO_HASH    = 0
 	RECORD_HI_HASH    = RECORD_LO_HASH + 8
@@ -136,20 +140,6 @@ func (m *im[K, V]) isUsedBucket(lo, hi, ofs uint64) bool {
 	return !m.isNeverUsedBucket(lo, hi, ofs) && !m.isTombstoneBucket(lo, hi, ofs)
 }
 
-func (m *im[K, V]) getFreeNextByte() uint64 {
-	return binary.LittleEndian.Uint64(m.mem[OFS_NEXT_FREE_BYTE:])
-}
-
-func (m *im[K, V]) incFreeNextByte(size uint64) uint64 {
-	nextFreeByte := m.getFreeNextByte() + size
-	binary.LittleEndian.PutUint64(m.mem[OFS_NEXT_FREE_BYTE:], nextFreeByte)
-	return nextFreeByte
-}
-
-func (m *im[K, V]) writeFreeNextByte(next uint64) {
-	binary.LittleEndian.PutUint64(m.mem[OFS_NEXT_FREE_BYTE:], next)
-}
-
 func (m *im[K, V]) writeRecord(ofs uint64, lo uint64, hi uint64, k K, v V) (size uint64, err error) {
 	keyLength, err := m.seraliser.Write(k, m.mem[ofs+RECORD_KEY:])
 	if err != nil {
@@ -202,18 +192,79 @@ func (m *im[K, V]) eraseRecord(ofs uint64) {
 	}
 }
 
-func (m *im[K, V]) readCount() uint64 {
+// --------- Counters ----------------------------------------------------------------------------------------------------------------------------------------
+
+func (m *im[K, V]) getFreeNextByte() uint64 {
+	return binary.LittleEndian.Uint64(m.mem[OFS_NEXT_FREE_BYTE:])
+}
+
+func (m *im[K, V]) incFreeNextByte(size uint64) uint64 {
+	nextFreeByte := m.getFreeNextByte() + size
+	binary.LittleEndian.PutUint64(m.mem[OFS_NEXT_FREE_BYTE:], nextFreeByte)
+	return nextFreeByte
+}
+
+func (m *im[K, V]) writeFreeNextByte(next uint64) {
+	binary.LittleEndian.PutUint64(m.mem[OFS_NEXT_FREE_BYTE:], next)
+}
+
+func (m *im[K, V]) CountU64() uint64 {
 	return binary.LittleEndian.Uint64(m.mem[OFS_COUNT:])
 }
 
 func (m *im[K, V]) incCount() uint64 {
-	newCount := m.readCount() + 1
+	newCount := m.CountU64() + 1
 	binary.LittleEndian.PutUint64(m.mem[OFS_COUNT:], newCount)
 	return newCount
 }
 
 func (m *im[K, V]) decCount() uint64 {
-	newCount := m.readCount() - 1
+	newCount := m.CountU64() - 1
 	binary.LittleEndian.PutUint64(m.mem[OFS_COUNT:], newCount)
 	return newCount
+}
+
+func (m *im[K, V]) StatsInserts() uint64 {
+	return binary.LittleEndian.Uint64(m.mem[OFS_INSERTS:])
+}
+
+func (m *im[K, V]) incInserts() uint64 {
+	newCount := m.StatsInserts() + 1
+	binary.LittleEndian.PutUint64(m.mem[OFS_INSERTS:], newCount)
+	return newCount
+}
+
+func (m *im[K, V]) StatsDeletes() uint64 {
+	return binary.LittleEndian.Uint64(m.mem[OFS_DELETES:])
+}
+
+func (m *im[K, V]) incDeletes() uint64 {
+	newCount := m.StatsDeletes() + 1
+	binary.LittleEndian.PutUint64(m.mem[OFS_DELETES:], newCount)
+	return newCount
+}
+
+func (m *im[K, V]) StatsUpdates() uint64 {
+	return binary.LittleEndian.Uint64(m.mem[OFS_UPDATES:])
+}
+
+func (m *im[K, V]) incUpdates() uint64 {
+	newCount := m.StatsUpdates() + 1
+	binary.LittleEndian.PutUint64(m.mem[OFS_UPDATES:], newCount)
+	return newCount
+}
+
+func (m *im[K, V]) ClogRatio() uint8 {
+	return m.mem[OFS_CLOG_RATIO]
+}
+
+func (m *im[K, V]) resetClogRatio() {
+	m.mem[OFS_CLOG_RATIO] = 0
+}
+
+func (m *im[K, V]) updateClogRatio(visitedBuckets uint32) {
+	ratio := uint8(int64(visitedBuckets*0xff) / int64(m.buckets))
+	if m.ClogRatio() < ratio {
+		m.mem[OFS_CLOG_RATIO] = ratio
+	}
 }

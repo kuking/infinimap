@@ -18,7 +18,6 @@ type im[K comparable, V any] struct {
 	buckets     uint32
 	file        *os.File
 	mem         mmap.MMap
-	cloggedWarn bool
 }
 
 func (m *im[K, V]) Put(k K, v V) (previous V, replace bool, err error) {
@@ -31,6 +30,10 @@ func (m *im[K, V]) Put(k K, v V) (previous V, replace bool, err error) {
 	firstTombstone := uint32(math.MaxUint32)
 	bucket := m.calBucketFromHash(lo, hi)
 	startingBucket := bucket
+	visitedBuckets := uint32(0)
+	defer func() {
+		m.updateClogRatio(visitedBuckets)
+	}()
 	for {
 		blo, bhi, bofs := m.readBucket(bucket)
 		if m.isNeverUsedBucket(blo, bhi, bofs) || (startingBucket == bucket && firstTombstone != math.MaxUint32) {
@@ -51,6 +54,7 @@ func (m *im[K, V]) Put(k K, v V) (previous V, replace bool, err error) {
 			}
 			m.incFreeNextByte(size)
 			m.incCount()
+			m.incInserts()
 			return zero[V](), false, nil
 		} else if m.isTombstoneBucket(blo, bhi, bofs) {
 			if firstTombstone == math.MaxUint32 {
@@ -76,18 +80,15 @@ func (m *im[K, V]) Put(k K, v V) (previous V, replace bool, err error) {
 					return zero[V](), false, err
 				}
 				m.incFreeNextByte(size)
+				m.incUpdates()
 				return previous, true, nil
 			}
 		}
+		visitedBuckets++
 		bucket = (bucket + 1) % m.buckets
 		if startingBucket == bucket {
 			if firstTombstone == math.MaxUint32 {
 				return zero[V](), false, errors.New("no empty bucket found, consider increasing the map capacity at creation time or convert it")
-			} else {
-				if !m.cloggedWarn {
-					log.Print("this infinimap is clogged you probably want to re-create with more capacity or call re-index")
-					m.cloggedWarn = true
-				}
 			}
 		}
 	}
@@ -126,6 +127,10 @@ func (m *im[K, V]) Delete(k K) (deleted bool) {
 	}
 	bucket := m.calBucketFromHash(lo, hi)
 	startingBucket := bucket
+	visitedBuckets := uint32(0)
+	defer func() {
+		m.updateClogRatio(visitedBuckets)
+	}()
 	for {
 		blo, bhi, bofs := m.readBucket(bucket)
 		if m.isNeverUsedBucket(blo, bhi, bofs) {
@@ -138,8 +143,10 @@ func (m *im[K, V]) Delete(k K) (deleted bool) {
 			m.eraseBucket(bucket)
 			m.eraseRecord(bofs)
 			m.decCount()
+			m.incDeletes()
 			return true
 		}
+		visitedBuckets++
 		bucket = (bucket + 1) % m.buckets
 		if startingBucket == bucket {
 			return false // not found after iterating over all buckets
@@ -148,7 +155,7 @@ func (m *im[K, V]) Delete(k K) (deleted bool) {
 }
 
 func (m *im[K, V]) Count() int {
-	return int(m.readCount())
+	return int(m.CountU64())
 }
 
 func (m *im[K, V]) Keys() <-chan K {
@@ -206,7 +213,6 @@ func (m *im[K, V]) Each(f func(K, V) (cont bool)) error {
 	}
 	return nil
 }
-
 func (m *im[K, V]) Compact() error {
 	panic(errors.New("not implemented"))
 }

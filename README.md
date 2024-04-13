@@ -14,16 +14,20 @@ Scale to Hundreds of Terabytes with This Efficient, Persistent Zero-Copy Map.
 
 ### Header
 
-| **Name**         | **bits** | **Description**                      |
-|:-----------------|:--------:|:-------------------------------------|
-| File Version     |    16    | v1=0x1f17                            |
-| Hashing Algo     |    8     | 1=xx128, 2=cityHash128, ...          |
-| Compression algo |    8     | 0=None, 1=LZ4                        |
-| Buckets          |    32    | Number of buckets                    |
-| Next Free Byte   |    64    | int64, where to store the next value |
-| Inserts          |    64    | Number of Inserts                    |
-| Deletes          |    64    | Number of Deletes                    |
-| Count            |    64    | Number of Elements                   |
+| **Name**         | **bits** | **Description**                                     |
+|:-----------------|:--------:|:----------------------------------------------------|
+| File Version     |    16    | v1=0x1f17                                           |
+| Hashing Algo     |    8     | 1=xx128, 2=cityHash128, ...                         |
+| Compression algo |    8     | 0=None, 1=LZ4                                       |
+| Buckets          |    32    | Number of buckets                                   |
+| Next Free Byte   |    64    | int64, where to store the next value                |
+| Inserts          |    64    | Number of Inserts                                   |
+| Updates          |    64    | Number of Updates                                   |
+| Deletes          |    64    | Number of Deletes                                   |
+| Count            |    64    | Number of Elements                                  |
+| Clog Ratio       |    8     | 0-0xff as ratio of clogging                         |
+|                  |          | 0x00 = bucket found on first stop                   |
+|                  |          | 0x80 = 50% clog; i.e. visited 1k buckets out of  2k |                           
 
 ### Buckets
 
@@ -32,7 +36,7 @@ Scale to Hundreds of Terabytes with This Efficient, Persistent Zero-Copy Map.
 | Hash     |   128    | the key hash                   |
 | Offset   |    64    | int64 file offset to the value |
 
-### Records 
+### Records
 
 | **Name**   |    **bits**    | **Description**          |
 |:-----------|:--------------:|:-------------------------|
@@ -45,3 +49,4 @@ Scale to Hundreds of Terabytes with This Efficient, Persistent Zero-Copy Map.
 # TODO
 
 - https://github.com/peterbourgon/diskv
+- reindexing after clogging

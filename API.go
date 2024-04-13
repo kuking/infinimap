@@ -14,6 +14,13 @@ type InfiniMap[K comparable, V any] interface {
 	Values() <-chan V
 	Each(func(K, V) (cont bool)) error
 
+	StatsInserts() uint64
+	StatsDeletes() uint64
+	StatsUpdates() uint64
+
+	CountU64() uint64
+	ClogRatio() uint8
+
 	Compact() error
 	Sync() error
 	Close() error

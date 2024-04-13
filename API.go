@@ -7,12 +7,12 @@ import (
 
 type InfiniMap[K comparable, V any] interface {
 	Put(K, V) (previous V, replace bool, err error)
-	Get(K) (V, bool)
-	Delete(K) bool
+	Get(K) (value V, found bool)
+	Delete(K) (deleted bool)
 	Count() int
 	Keys() <-chan K
 	Values() <-chan V
-	Each(func(K, V) bool) error
+	Each(func(K, V) (cont bool)) error
 
 	Compact() error
 	Sync() error

@@ -73,7 +73,7 @@ func (m *im[K, V]) Put(k K, v V) (previous V, replace bool, err error) {
 
 }
 
-func (m *im[K, V]) Get(k K) (V, bool) {
+func (m *im[K, V]) Get(k K) (v V, found bool) {
 
 	lo, hi, err := m.resolveHash(k)
 	if err != nil {
@@ -81,19 +81,27 @@ func (m *im[K, V]) Get(k K) (V, bool) {
 	}
 
 	bucket := m.calBucketFromHash(lo, hi)
-
-	blo, bhi, bofs := m.readBucket(bucket)
-	if blo == lo && bhi == hi && m.isSlotForKey(bofs, lo, hi, k) {
-		if v, err := m.readRecordValue(bofs); err == nil {
-			return v, true
+	startingBucket := bucket
+	for {
+		blo, bhi, bofs := m.readBucket(bucket)
+		if blo == 0 && bhi == 0 && bofs == 0 {
+			return zero[V](), false
 		}
+		if blo == lo && bhi == hi && m.isSlotForKey(bofs, lo, hi, k) {
+			if v, err := m.readRecordValue(bofs); err == nil {
+				return v, true
+			}
+		}
+
+		bucket = (bucket + 1) % m.buckets
+		if startingBucket == bucket {
+			return zero[V](), false // not found
+		}
+		bucket++
 	}
-
-	return zero[V](), false
-
 }
 
-func (m *im[K, V]) Delete(k K) bool {
+func (m *im[K, V]) Delete(k K) (deleted bool) {
 	klo, khi, err := m.resolveHash(k)
 	if err != nil {
 		return false
@@ -160,7 +168,7 @@ func (m *im[K, V]) Values() <-chan V {
 	return ch
 }
 
-func (m *im[K, V]) Each(f func(K, V) bool) error {
+func (m *im[K, V]) Each(f func(K, V) (cont bool)) error {
 	for bucket := uint32(0); bucket < m.buckets; bucket++ {
 		lo, hi, ofs := m.readBucket(bucket)
 		if lo != 0 && hi != 0 && ofs != 0 {

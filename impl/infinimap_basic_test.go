@@ -3,8 +3,11 @@ package impl
 import (
 	"github.com/kuking/infinimap"
 	"github.com/zeebo/assert"
+	"log"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestHappyPath(t *testing.T) {
@@ -65,6 +68,55 @@ func TestHappyPath(t *testing.T) {
 
 	assert.Nil(t, getKeys(imap))
 	assert.Nil(t, getValues(imap))
+}
+
+func TestBasicDrill(t *testing.T) {
+	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
+	defer deferredCleanup(tempFile)
+
+	records := uint64(1_000_000)
+
+	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(int(records*2)))
+	assert.NoError(t, err)
+
+	t0 := time.Now()
+	for i := uint64(0); i < records; i++ {
+		_, _, err := imap.Put(i, strconv.Itoa(int(i)))
+		assert.NoError(t, err)
+	}
+	elapsed := time.Since(t0)
+	log.Printf("Took %v to insert %.1fM records or %.2fK records/s",
+		elapsed.Truncate(time.Microsecond), float64(records)/1000.0/1000.0, float64(records)/float64(elapsed.Seconds())/1000.0)
+
+	t0 = time.Now()
+	for i := uint64(0); i < records; i++ {
+		val, found := imap.Get(i)
+		assert.True(t, found)
+		assert.Equal(t, strconv.Itoa(int(i)), val)
+	}
+	elapsed = time.Since(t0)
+	log.Printf("Took %v to read %.1fM records or %.2fK records/s",
+		elapsed.Truncate(time.Microsecond), float64(records)/1000.0/1000.0, float64(records)/float64(elapsed.Seconds())/1000.0)
+
+	t0 = time.Now()
+	c := 0
+	for _ = range imap.Keys() {
+		c++
+	}
+	assert.Equal(t, int(records), c)
+	elapsed = time.Since(t0)
+	log.Printf("Took %v to read the keys of %.1fM records or %.2fK keys/s",
+		elapsed.Truncate(time.Microsecond), float64(records)/1000.0/1000.0, float64(records)/float64(elapsed.Seconds())/1000.0)
+
+	t0 = time.Now()
+	c = 0
+	for _ = range imap.Values() {
+		c++
+	}
+	assert.Equal(t, int(records), c)
+	elapsed = time.Since(t0)
+	log.Printf("Took %v to read the values of %.1fM records or %.2fK values/s",
+		elapsed.Truncate(time.Microsecond), float64(records)/1000.0/1000.0, float64(records)/float64(elapsed.Seconds())/1000.0)
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

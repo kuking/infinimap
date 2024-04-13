@@ -70,7 +70,7 @@ func (c *createParams) GetHashing() infinimap.Hashing {
 
 func NewCreateParameters() infinimap.CreateParameters {
 	return &createParams{
-		capacity:    1_000_000,
+		capacity:    5_000_000,
 		totalFileMb: 16_000,
 		fileMode:    0644,
 		concurrency: false,

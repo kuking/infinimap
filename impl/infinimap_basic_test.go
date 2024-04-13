@@ -1,6 +1,7 @@
 package impl
 
 import (
+	"github.com/kuking/infinimap"
 	"github.com/zeebo/assert"
 	"os"
 	"testing"
@@ -27,6 +28,9 @@ func TestHappyPath(t *testing.T) {
 
 	assert.Equal(t, 1, imap.Count())
 
+	assert.Equal(t, getKeys(imap), []uint64{1})
+	assert.Equal(t, getValues(imap), []string{"Uno"})
+
 	didEach := false
 	err = imap.Each(func(k uint64, v string) bool {
 		assert.Equal(t, 1, k)
@@ -42,12 +46,14 @@ func TestHappyPath(t *testing.T) {
 	assert.True(t, replaced)
 	assert.NoError(t, err)
 
-	// do assert for keys and values
+	assert.Equal(t, getKeys(imap), []uint64{1})
+	assert.Equal(t, getValues(imap), []string{"Uno 2.0"})
 
 	assert.True(t, imap.Delete(1))
 
 	value, found = imap.Get(1)
-	assert.False(t, true)
+	assert.False(t, found)
+	assert.Equal(t, "", value)
 
 	assert.Equal(t, 0, imap.Count())
 
@@ -57,7 +63,26 @@ func TestHappyPath(t *testing.T) {
 		return true
 	})
 
-	// do assert for keys and values
+	assert.Nil(t, getKeys(imap))
+	assert.Nil(t, getValues(imap))
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+func getKeys[K comparable, V any](imap infinimap.InfiniMap[K, V]) []K {
+	var res []K
+	for key := range imap.Keys() {
+		res = append(res, key)
+	}
+	return res
+}
+
+func getValues[K comparable, V any](imap infinimap.InfiniMap[K, V]) []V {
+	var res []V
+	for value := range imap.Values() {
+		res = append(res, value)
+	}
+	return res
 }
 
 func deferredCleanup(file *os.File) {

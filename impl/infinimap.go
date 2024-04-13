@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/edsrzf/mmap-go"
 	"github.com/kuking/infinimap"
+	"log"
 	"os"
 )
 
@@ -93,18 +94,30 @@ func (m *im[K, V]) Get(k K) (V, bool) {
 }
 
 func (m *im[K, V]) Delete(k K) bool {
-	lo, hi, err := m.resolveHash(k)
+	klo, khi, err := m.resolveHash(k)
 	if err != nil {
 		return false
 	}
-	bucket := m.calBucketFromHash(lo, hi)
-	blo, bhi, bofs := m.readBucket(bucket)
-	if blo == lo && bhi == hi && m.isSlotForKey(bofs, lo, hi, k) {
-		m.eraseBucket(bucket)
-		m.eraseRecord(bofs)
-		m.decCount()
+	bucket := m.calBucketFromHash(klo, khi)
+	startingBucket := bucket
+	for {
+		blo, bhi, bofs := m.readBucket(bucket)
+		if blo == 0 && bhi == 0 && bofs == 0 {
+			// not found
+			return false
+		}
+		if blo == klo && bhi == khi && m.isSlotForKey(bofs, klo, khi, k) {
+			// found
+			m.eraseBucket(bucket)
+			m.eraseRecord(bofs)
+			m.decCount()
+			return true
+		}
+		bucket = (bucket + 1) % m.buckets
+		if startingBucket == bucket {
+			return false // not found after iterating over all buckets
+		}
 	}
-	panic(errors.New("not implemented"))
 }
 
 func (m *im[K, V]) Count() int {
@@ -112,11 +125,39 @@ func (m *im[K, V]) Count() int {
 }
 
 func (m *im[K, V]) Keys() <-chan K {
-	panic(errors.New("not implemented"))
+	ch := make(chan K, 10)
+	go func() {
+		defer close(ch)
+		for bucket := uint32(0); bucket < m.buckets; bucket++ {
+			lo, hi, ofs := m.readBucket(bucket)
+			if lo != 0 && hi != 0 && ofs != 0 {
+				key, err := m.readRecordKey(ofs)
+				if err != nil {
+					log.Print(err)
+				}
+				ch <- key
+			}
+		}
+	}()
+	return ch
 }
 
 func (m *im[K, V]) Values() <-chan V {
-	panic(errors.New("not implemented"))
+	ch := make(chan V, 10)
+	go func() {
+		defer close(ch)
+		for bucket := uint32(0); bucket < m.buckets; bucket++ {
+			lo, hi, ofs := m.readBucket(bucket)
+			if lo != 0 && hi != 0 && ofs != 0 {
+				value, err := m.readRecordValue(ofs)
+				if err != nil {
+					log.Print(err)
+				}
+				ch <- value
+			}
+		}
+	}()
+	return ch
 }
 
 func (m *im[K, V]) Each(f func(K, V) bool) error {

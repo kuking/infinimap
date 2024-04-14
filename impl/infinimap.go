@@ -266,7 +266,16 @@ func (m *im[K, V]) Sync() error {
 }
 
 func (m *im[K, V]) Close() error {
-	panic(errors.New("not implemented"))
+	if err := m.mem.Flush(); err != nil {
+		return err
+	}
+	if err := m.mem.Unmap(); err != nil {
+		return err
+	}
+	if err := m.file.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------

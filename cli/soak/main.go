@@ -30,7 +30,7 @@ func main() {
 	defer os.Remove(tempFile.Name()) // Clean up: delete the temporary file after the test
 
 	imap, err := impl.CreateInfinimap[uint64, string](tempFile.Name(),
-		impl.NewCreateParameters().WithCapacity(5_000_000)) //XXX
+		impl.NewCreateParameters().WithCapacity(25_000_000))
 	defer imap.Close() // Ensure the map is closed on program exit
 
 	reference := make(map[uint64]string) // Reference map to validate InfiniMap operations
@@ -82,17 +82,20 @@ func soak(imap infinimap.InfiniMap[uint64, string], reference map[uint64]string,
 		ops++
 		if time.Since(lastLog) > 15*time.Second {
 			lastLog = time.Now()
-			log.Printf("[%.f%%] %.1fM ops, %d count, %d inserts, %d updates, %d deletes, %.1f%% clog\n",
-				float32(time.Now().Sub(startTime)*100.0/duration), float32(ops)/1_000_000.0, imap.Count(),
-				imap.StatsInserts(), imap.StatsUpdates(), imap.StatsDeletes(), float32(imap.ClogRatio())/255.0)
+			mill := 1_000_000.0
+			log.Printf("[%.f%%] %.2fM ops, %.2fM entries: %.2fM inserts, %.2fM updates, %.2fM deletes, %.1f%% clog\n",
+				float64(time.Now().Sub(startTime)*100.0/duration), float64(ops)/mill, float64(imap.Count())/mill,
+				float64(imap.StatsInserts())/mill, float64(imap.StatsUpdates())/mill, float64(imap.StatsDeletes())/mill, float32(imap.ClogRatio())/255.0)
 		}
 	}
 }
 
 func doRandomOperation(imap infinimap.InfiniMap[uint64, string], reference map[uint64]string, ops int) {
 	operation := rand.Intn(4)
-	if len(reference) < 1_000_000 {
-		operation = 0
+	if imap.Count() < 1_000_000 {
+		operation = 0 // insert!
+	} else if imap.Count() > 10_000_000 {
+		operation = 2 // delete!
 	}
 	switch operation {
 	case 0: // Insert

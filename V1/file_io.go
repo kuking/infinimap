@@ -44,7 +44,8 @@ func Create[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K
 		return nil, err
 	}
 
-	if err = file.Truncate(int64(cfg.GetFileSizeMB()) * 1024 * 1024); err != nil {
+	size := int64(cfg.GetFileSizeMB() * 1024 * 1024)
+	if err = file.Truncate(size); err != nil {
 		return nil, err
 	}
 
@@ -59,7 +60,9 @@ func Create[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K
 		hasher:      BasicTypesHasher{},
 		seraliser:   BasicTypesSerializer{},
 		buckets:     uint32(cfg.GetCapacity()) * 2, // twice the amount of buckets as expected capacity
+		path:        path,
 		file:        file,
+		size:        uint64(size),
 		mem:         mem,
 	}
 
@@ -78,29 +81,19 @@ func Create[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K
 }
 
 func Open[K comparable, V any](path string) (InfiniMap[K, V], error) {
-
-	file, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	mem, err := mmap.Map(file, mmap.RDWR, 0)
-	if err != nil {
-		return nil, err
-	}
-
 	im := &im[K, V]{
-		compression: Compression(mem[OFS_COMPRESSION_ALGO]),
-		hashing:     Hashing(mem[OFS_HASHING_ALGO]),
-		hasher:      BasicTypesHasher{},
-		seraliser:   BasicTypesSerializer{},
-		buckets:     binary.LittleEndian.Uint32(mem[OFS_BUCKETS:]),
-		file:        file,
-		mem:         mem,
+		hasher:    BasicTypesHasher{},
+		seraliser: BasicTypesSerializer{},
+		path:      path,
 	}
+	if err := im.internalOpen(); err != nil {
+		return nil, err
+	}
+	im.compression = Compression(im.mem[OFS_COMPRESSION_ALGO])
+	im.hashing = Hashing(im.mem[OFS_HASHING_ALGO])
+	im.buckets = binary.LittleEndian.Uint32(im.mem[OFS_BUCKETS:])
 
 	assertValidIm(im)
-
 	return im, nil
 }
 
@@ -112,12 +105,45 @@ func OpenOrCreate[K comparable, V any](path string, cfg CreateParameters) (Infin
 	}
 }
 
-func (m *im[K, V]) Shrink() error {
-	panic(errors.New("not implemented"))
+func (m *im[K, V]) internalOpen() error {
+	file, err := os.OpenFile(m.path, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	m.file = file
+
+	mem, err := mmap.Map(file, mmap.RDWR, 0)
+	if err != nil {
+		return err
+	}
+	m.mem = mem
+
+	if fi, err := m.file.Stat(); err != nil {
+		return err
+	} else {
+		m.size = uint64(fi.Size())
+	}
+	return nil
 }
 
-func (m *im[K, V]) Expand() error {
-	panic(errors.New("not implemented"))
+func (m *im[K, V]) Shrink() error {
+	if err := m.file.Truncate(int64(m.getFreeNextByte())); err != nil {
+		return err
+	}
+	if err := m.Close(); err != nil {
+		return err
+	}
+	return m.internalOpen()
+}
+
+func (m *im[K, V]) Expand(bytes uint64) error {
+	if err := m.file.Truncate(int64(m.BytesAllocated() + bytes)); err != nil {
+		return err
+	}
+	if err := m.Close(); err != nil {
+		return err
+	}
+	return m.internalOpen()
 }
 
 func (m *im[K, V]) Sync() error {
@@ -185,6 +211,9 @@ func (m *im[K, V]) isUsedBucket(lo, hi, ofs uint64) bool {
 }
 
 func (m *im[K, V]) writeRecord(ofs uint64, lo uint64, hi uint64, k K, v V) (size uint64, err error) {
+	if ofs+256*1024 > m.size { // we can't tell upfront the size if V without serialising and allocating, so thumb-rule 256KiB
+		return size, errors.New("we nearly ran out of space - expand the infinimap")
+	}
 	keyLength, err := m.seraliser.Write(k, m.mem[ofs+RECORD_KEY:])
 	if err != nil {
 		return 0, err

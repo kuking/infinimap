@@ -15,7 +15,9 @@ type im[K comparable, V any] struct {
 	hasher      Hasher
 	seraliser   Serializer
 	buckets     uint32
+	path        string
 	file        *os.File
+	size        uint64
 	mem         mmap.MMap
 }
 

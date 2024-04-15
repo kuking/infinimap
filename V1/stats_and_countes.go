@@ -84,10 +84,7 @@ func (m *im[K, V]) BytesAllocated() uint64 {
 }
 
 func (m *im[K, V]) BytesAvailable() uint64 {
-	if fs, err := m.file.Stat(); err == nil {
-		return uint64(fs.Size()) - m.BytesAllocated()
-	}
-	return 0
+	return m.size - m.BytesAllocated()
 }
 
 func (m *im[K, V]) BytesInUse() uint64 {

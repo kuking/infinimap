@@ -36,7 +36,7 @@ type InfiniMap[K comparable, V any] interface {
 	*/
 	//Compact(CompactParameters) error
 	Shrink() error
-	Expand() error
+	Expand(bytes uint64) error
 	BytesAllocated() uint64
 	BytesInUse() uint64
 	BytesReclaimable() uint64

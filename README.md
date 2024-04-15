@@ -131,6 +131,4 @@ implementation is in the file `cli/soak/main.go`.
 
 - explain why infinimap is better than https://github.com/peterbourgon/diskv
 - compact
-- shrink
-- expand
 - compression

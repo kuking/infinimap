@@ -87,9 +87,18 @@ func (c *compactParams) WithMinimumCapacity(b bool) CompactParameters {
 	c.minimumCapacity = b
 	return c
 }
+
+func (c *compactParams) HasMinimumCapacity() bool {
+	return c.minimumCapacity
+}
+
 func (c *compactParams) WithMinimumFileSize(b bool) CompactParameters {
 	c.minimumFileSize = b
 	return c
+}
+
+func (c *compactParams) HasMinimumFileSize() bool {
+	return c.minimumFileSize
 }
 
 func NewCompactParameters() CompactParameters {

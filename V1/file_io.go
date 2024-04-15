@@ -146,6 +146,58 @@ func (m *im[K, V]) Expand(bytes uint64) error {
 	return m.internalOpen()
 }
 
+func (m *im[K, V]) Compact(params CompactParameters) (InfiniMap[K, V], error) {
+
+	fi, err := m.file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := NewCreateParameters().WithCompression(m.compression).WithHashing(m.hashing).WithFileMode(fi.Mode())
+	if params.HasMinimumCapacity() {
+		cfg.WithCapacity(m.Count())
+	}
+
+	originalFilepath := m.path
+	newFilepath := originalFilepath + ".compacted"
+	newMap, err := Create[K, V](newFilepath, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	var copyError error
+	err = m.Each(func(k K, v V) (cont bool) {
+		_, _, copyError = newMap.Put(k, v)
+		return copyError == nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if copyError != nil {
+		return nil, copyError
+	}
+
+	if params.HasMinimumFileSize() {
+		if err = newMap.Shrink(); err != nil {
+			return nil, err
+		}
+	}
+
+	// now close both, rename and re-open
+	if err = m.Close(); err != nil {
+		return nil, err
+	}
+
+	if err = os.Remove(originalFilepath); err != nil {
+		return nil, err
+	}
+	if err = os.Rename(newFilepath, originalFilepath); err != nil {
+		return nil, err
+	}
+
+	return Open[K, V](originalFilepath)
+}
+
 func (m *im[K, V]) Sync() error {
 	if err := m.mem.Flush(); err != nil {
 		return err

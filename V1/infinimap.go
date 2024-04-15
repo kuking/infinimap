@@ -258,10 +258,6 @@ func (m *im[K, V]) Reindex() error {
 	})
 }
 
-func (m *im[K, V]) Compact() error {
-	panic(errors.New("not implemented"))
-}
-
 func (m *im[K, V]) SetCustomSerializer(serializer Serializer) {
 	m.seraliser = serializer
 }

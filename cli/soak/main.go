@@ -37,6 +37,16 @@ func main() {
 	soak(imap, reference, time.Duration(mins)*60*time.Second)
 
 	verify(imap, reference)
+
+	log.Println("Compacting ...")
+	imap, err = imap.Compact(V1.NewCompactParameters().WithMinimumCapacity(true).WithMinimumFileSize(true))
+	log.Printf("New file size is %.1fG\n", float64(imap.BytesAllocated())/(1024.0*1024.0*1024.0))
+	defer imap.Close()
+	if err != nil {
+		log.Println(err)
+	}
+	verify(imap, reference)
+
 }
 
 func verify(imap V1.InfiniMap[uint64, string], reference map[uint64]string) {
@@ -82,19 +92,26 @@ func soak(imap V1.InfiniMap[uint64, string], reference map[uint64]string, durati
 	for time.Since(startTime) < duration {
 		ops, insertCount = doRandomOperation(imap, reference, ops, insertCount)
 		gets := uint64(ops) - imap.StatsDeletes() - imap.StatsInserts() - imap.StatsUpdates()
-		if time.Since(lastLog) > 15*time.Second {
+		if time.Since(lastLog) > 30*time.Second {
 			lastLog = time.Now()
-			mill := 1_000_000.0
-			gig := 1024.0 * 1024.0 * 1024.0
-			log.Printf("[%.f%%] %.2fM ops, %.2fM entries: %.2fM inserts, %.2fM updates, %.2fM deletes, %.2fM gets, %.1f%% clog\n",
-				float64(time.Now().Sub(startTime)*100.0/duration), float64(ops)/mill, float64(imap.Count())/mill,
-				float64(imap.StatsInserts())/mill, float64(imap.StatsUpdates())/mill, float64(imap.StatsDeletes())/mill, float64(gets)/mill,
-				float32(imap.ClogRatio())/255.0)
-			log.Printf("  ... disk space: %.1fG allocated, %.1fG in use, %.1fG reclaimable, %.1fG available\n",
-				float64(imap.BytesAllocated())/gig, float64(imap.BytesInUse())/gig, float64(imap.BytesReclaimable())/gig, float64(imap.BytesAvailable())/gig)
-
+			logStats(imap, startTime, duration, ops, gets)
 		}
 	}
+	if time.Since(lastLog) > 1*time.Second {
+		gets := uint64(ops) - imap.StatsDeletes() - imap.StatsInserts() - imap.StatsUpdates()
+		logStats(imap, startTime, duration, ops, gets)
+	}
+}
+
+func logStats(imap V1.InfiniMap[uint64, string], startTime time.Time, duration time.Duration, ops int, gets uint64) {
+	mill := 1_000_000.0
+	gig := 1024.0 * 1024.0 * 1024.0
+	log.Printf("[%.f%%] %.2fM ops, %.2fM entries: %.2fM inserts, %.2fM updates, %.2fM deletes, %.2fM gets, %.1f%% clog\n",
+		float64(time.Now().Sub(startTime)*100.0/duration), float64(ops)/mill, float64(imap.Count())/mill,
+		float64(imap.StatsInserts())/mill, float64(imap.StatsUpdates())/mill, float64(imap.StatsDeletes())/mill, float64(gets)/mill,
+		float32(imap.ClogRatio())/255.0)
+	log.Printf("  ... disk space: %.1fG allocated, %.1fG in use, %.1fG reclaimable, %.1fG available\n",
+		float64(imap.BytesAllocated())/gig, float64(imap.BytesInUse())/gig, float64(imap.BytesReclaimable())/gig, float64(imap.BytesAvailable())/gig)
 }
 
 func doRandomOperation(imap V1.InfiniMap[uint64, string], reference map[uint64]string, ops int, insertCount int) (int, int) {

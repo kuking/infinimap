@@ -34,7 +34,7 @@ type InfiniMap[K comparable, V any] interface {
 	/*
 		Space maintenance
 	*/
-	//Compact(CompactParameters) error
+	Compact(CompactParameters) (InfiniMap[K, V], error)
 	Shrink() error
 	Expand(bytes uint64) error
 	BytesAllocated() uint64
@@ -90,5 +90,7 @@ type CreateParameters interface {
 
 type CompactParameters interface {
 	WithMinimumCapacity(bool) CompactParameters
+	HasMinimumCapacity() bool
 	WithMinimumFileSize(bool) CompactParameters
+	HasMinimumFileSize() bool
 }

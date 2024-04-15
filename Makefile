@@ -1,4 +1,4 @@
-all: clean test bench coverage build
+all: clean test build
 
 .PHONY: clean
 clean:
@@ -6,8 +6,8 @@ clean:
 	rm -f demo/soak
 
 .PHONY: build
-build: clean test bench coverage
-	go build
+build: clean test
+	go build ./...
 	go build -o demo/soak cli/soak/main.go
 
 .PHONY: test
@@ -16,7 +16,7 @@ test:
 
 .PHONY: bench
 bench:
-	go test -run=Benchmark -bench=. -benchmem
+	go test -run=Benchmark -bench=. -benchmem ./...
 
 .PHONY: vet
 vet:
@@ -24,6 +24,6 @@ vet:
 
 .PHONY: coverage
 coverage:
-	go test -cover -coverprofile=coverage.out
+	go test -cover -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
 

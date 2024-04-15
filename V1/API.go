@@ -5,7 +5,7 @@ import (
 	"reflect"
 )
 
-type InfiniMap[K comparable, V any] interface {
+type Map[K comparable, V any] interface {
 	/*
 		Fundamental API
 	*/
@@ -34,7 +34,7 @@ type InfiniMap[K comparable, V any] interface {
 	/*
 		Space maintenance
 	*/
-	Compact(CompactParameters) (InfiniMap[K, V], error)
+	Compact(CompactParameters) (Map[K, V], error)
 	Shrink() error
 	Expand(bytes uint64) error
 	BytesAllocated() uint64

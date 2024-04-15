@@ -38,7 +38,7 @@ const (
 	THOMBSTONE_OFS = 3
 )
 
-func Create[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K, V], error) {
+func Create[K comparable, V any](path string, cfg CreateParameters) (Map[K, V], error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, cfg.GetFileMode())
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func Create[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K
 	return im, nil
 }
 
-func Open[K comparable, V any](path string) (InfiniMap[K, V], error) {
+func Open[K comparable, V any](path string) (Map[K, V], error) {
 	im := &im[K, V]{
 		hasher:    BasicTypesHasher{},
 		seraliser: BasicTypesSerializer{},
@@ -97,7 +97,7 @@ func Open[K comparable, V any](path string) (InfiniMap[K, V], error) {
 	return im, nil
 }
 
-func OpenOrCreate[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K, V], error) {
+func OpenOrCreate[K comparable, V any](path string, cfg CreateParameters) (Map[K, V], error) {
 	if fi, err := os.Stat(path); err != nil && !fi.IsDir() {
 		return Open[K, V](path)
 	} else {
@@ -146,7 +146,7 @@ func (m *im[K, V]) Expand(bytes uint64) error {
 	return m.internalOpen()
 }
 
-func (m *im[K, V]) Compact(params CompactParameters) (InfiniMap[K, V], error) {
+func (m *im[K, V]) Compact(params CompactParameters) (Map[K, V], error) {
 
 	fi, err := m.file.Stat()
 	if err != nil {

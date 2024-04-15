@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/kuking/infinimap/V1"
+	infinimap "github.com/kuking/infinimap/V1"
 	"log"
 	"math/rand"
 	"os"
@@ -28,8 +28,8 @@ func main() {
 	}
 	defer os.Remove(tempFile.Name()) // Clean up: delete the temporary file after the test
 
-	imap, err := V1.Create[uint64, string](tempFile.Name(),
-		V1.NewCreateParameters().WithCapacity(25_000_000))
+	imap, err := infinimap.Create[uint64, string](tempFile.Name(),
+		infinimap.NewCreateParameters().WithCapacity(25_000_000))
 	defer imap.Close() // Ensure the map is closed on program exit
 
 	reference := make(map[uint64]string) // Reference map to validate InfiniMap operations
@@ -39,7 +39,7 @@ func main() {
 	verify(imap, reference)
 
 	log.Println("Compacting ...")
-	imap, err = imap.Compact(V1.NewCompactParameters().WithMinimumCapacity(true).WithMinimumFileSize(true))
+	imap, err = imap.Compact(infinimap.NewCompactParameters().WithMinimumCapacity(true).WithMinimumFileSize(true))
 	log.Printf("New file size is %.1fG\n", float64(imap.BytesAllocated())/(1024.0*1024.0*1024.0))
 	defer imap.Close()
 	if err != nil {
@@ -49,7 +49,7 @@ func main() {
 
 }
 
-func verify(imap V1.InfiniMap[uint64, string], reference map[uint64]string) {
+func verify(imap infinimap.Map[uint64, string], reference map[uint64]string) {
 	ok := true
 	log.Println("Verifying contents ...")
 	for k, v := range reference {
@@ -84,7 +84,7 @@ func verify(imap V1.InfiniMap[uint64, string], reference map[uint64]string) {
 	}
 }
 
-func soak(imap V1.InfiniMap[uint64, string], reference map[uint64]string, duration time.Duration) {
+func soak(imap infinimap.Map[uint64, string], reference map[uint64]string, duration time.Duration) {
 	ops := 0
 	insertCount := 0
 	startTime := time.Now()
@@ -103,7 +103,7 @@ func soak(imap V1.InfiniMap[uint64, string], reference map[uint64]string, durati
 	}
 }
 
-func logStats(imap V1.InfiniMap[uint64, string], startTime time.Time, duration time.Duration, ops int, gets uint64) {
+func logStats(imap infinimap.Map[uint64, string], startTime time.Time, duration time.Duration, ops int, gets uint64) {
 	mill := 1_000_000.0
 	gig := 1024.0 * 1024.0 * 1024.0
 	log.Printf("[%.f%%] %.2fM ops, %.2fM entries: %.2fM inserts, %.2fM updates, %.2fM deletes, %.2fM gets, %.1f%% clog\n",
@@ -114,7 +114,7 @@ func logStats(imap V1.InfiniMap[uint64, string], startTime time.Time, duration t
 		float64(imap.BytesAllocated())/gig, float64(imap.BytesInUse())/gig, float64(imap.BytesReclaimable())/gig, float64(imap.BytesAvailable())/gig)
 }
 
-func doRandomOperation(imap V1.InfiniMap[uint64, string], reference map[uint64]string, ops int, insertCount int) (int, int) {
+func doRandomOperation(imap infinimap.Map[uint64, string], reference map[uint64]string, ops int, insertCount int) (int, int) {
 	operation := rand.Intn(4)
 	if imap.Count() < 1_000_000 {
 		operation = 0 // insert!

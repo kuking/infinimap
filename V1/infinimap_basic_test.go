@@ -249,7 +249,7 @@ func TestBasicCollisionsAndReindexing(t *testing.T) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-func getKeys[K comparable, V any](imap InfiniMap[K, V]) []K {
+func getKeys[K comparable, V any](imap Map[K, V]) []K {
 	var res []K
 	for key := range imap.Keys() {
 		res = append(res, key)
@@ -257,7 +257,7 @@ func getKeys[K comparable, V any](imap InfiniMap[K, V]) []K {
 	return res
 }
 
-func getValues[K comparable, V any](imap InfiniMap[K, V]) []V {
+func getValues[K comparable, V any](imap Map[K, V]) []V {
 	var res []V
 	for value := range imap.Values() {
 		res = append(res, value)

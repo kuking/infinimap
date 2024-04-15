@@ -1,15 +1,14 @@
 # InfiniMap
 
-Scale to Hundreds of Terabytes with This Efficient, Persistent Zero-Copy Map.
+Scale to Hundreds of Terabytes with This Efficient, Memory-like Speed, Persistent Zero-Copy Map.
 
 ## Overview
 
-InfiniMap is a high-performance, disk-resident generic map (`InfiniMap[K comparable, V any]`) optimized for storing large maps efficiently. It leverages the
-strengths of the operating system internals, zero-copy techniques and memory-mapped files, in practise you can operate with the speed of in-memory databases
-while maintaining the data persistence in disk.
+InfiniMap is a high-performance, disk-persistent map (`InfiniMap[K comparable, V any]`) optimized for storing large datasets efficiently. It leverages many
+strengths of the operating system internals, it uses zero-copy techniques and memory-mapped files; in practise you can operate with the speed of in-memory 
+databases while maintaining the data in disk, and not having to user any process memory as cache.
 
-Because uses the Operating System main disk cache, you will have memory-like performance while not using your own process memory.
-You won't have to deal with I/O more than to Open and Close it.
+There is no IO operations required, but to: Create, Open & Close.
 
 ## Usage
 
@@ -27,8 +26,8 @@ if value, found := imap.Get(uint64(123)); found {
 deleted := imap.Delete(uint64(123))
 
 err = imap.Each(func (k uint64, v string) bool) {
-fmt.Printf("[%v]=%s\n", k, v)
-return true
+    fmt.Printf("[%v]=%s\n", k, v)
+    return true
 })
 
 // etc i.e. Count(), Keys(), Values()
@@ -37,18 +36,18 @@ return true
 ## Maintenance
 
 If you do a lot of deletes and updates, you will have to do a `Compact(CompactParameters) error` from time to time to reclaim deleted space (if that is an issue
-for you), in order to decide when to reclaim deleted space, you can use the APIs `BytesDeleted() uint64`, `BytesUsed() uint64` `BytesAvailable() uint64`.
+for you), in order to decide when to reclaim deleted space, you can use the APIs `BytesReclaimable() uint64`, `BytesInUse() uint64` `BytesAvailable() uint64`.
 
 If you have added way too may entries going above the initial Capacity (`WithCapacity(int) CreateParameters`) the index might start to clog, and it will be
-detrimental to the overall performance check `ClogRatio() uint8` and `Reindex() error`.
+detrimental to the overall performance; you can checl `ClogRatio() uint8` and run `Reindex() error`. 
 
 ### Files sizes vs occupied space
 
-By default, an infinitimap will be created of 16TiB file, which is the limit on the typical Linux using EXT4 with 4KB block size.
+By default, an infinimap will be created of 16TiB file, which is the limit on the typical Linux using EXT4 with 4KB block size.
 
-- Why so big? because it is neded for the memory mapped file backing the data storage.
+- Why so big? because it is needed for the memory mapped file backing the data storage.
 - But, will it not fill my hard-disk? NO! all modern filesystems (i.e. ext4, zfs, btrfs, etc.) support sparse files, which differentiate between the "declared"
-  file-size, and the actually allocated storage.
+  file-size, and the actual data being used.
 
 You can read in detail about sparse files here: https://wiki.archlinux.org/title/sparse_file.
 
@@ -63,11 +62,19 @@ lookup, read-only map.
 You can still compress a 16TB of 'zeroes' which end up in almost a tiny gzipped tar, but it will take time, and upon decompress, and here you get into the
 nitty-gritty details of each filesystem implementation, it might actually allocate space for all those zeros. So, better to do shrink & expand for shipping.
 
+When you `Shrink()` an infinimap, you are effectively removing all available space (`BytesAvailable()` will return `0`). Therefore, you won't be able to add
+any new entry or update (Delete is OK). Until you `Expand()` the infinimap again.
+
 ## Serializer
 
 Data is ultimately stored in disk, therefore it has to be serialised in a consistent way, i.e. if you take a map from a little endian machine (intel/arm) and
 open it in a big endian computer, it should work. All basic data-types are serialised in the file `serializer.go` using little endian (the most common 
 endianness).  If you want to implement or extend the default serializer, you can set it the API constructor parameter `SetCustomSerializer(Serializer)`
+
+Types supported, all the basic types: `int8`, `uint8`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, `float64`, `string`, `bool`.
+Slices of fixed sized types are supported (basically everything but array of strings, but a string is OK.
+
+If you want to store complex objects, either write your own custom serializer or store it in a JSON, gob, etc.
 
 ## Data Structure
 
@@ -127,4 +134,3 @@ implementation is in the file `cli/soak/main.go`.
 - shrink
 - expand
 - compression
-- serialisers

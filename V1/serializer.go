@@ -57,6 +57,10 @@ func (_ BasicTypesSerializer) Write(v interface{}, dst []byte) (int, error) {
 		size := uint32(len(bytes))
 		binary.LittleEndian.PutUint32(dst[:], size)
 		return copy(dst[4:], bytes) + 4, nil
+	case []byte:
+		size := uint32(len(v.([]byte)))
+		binary.LittleEndian.PutUint32(dst[:], size)
+		return copy(dst[4:], v.([]byte)) + 4, nil
 	default: // slow
 		bw := bytes.NewBuffer(dst[:0])
 		// writes the slice length, if it is a slice

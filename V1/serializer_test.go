@@ -98,4 +98,8 @@ func TestSerializerArray(t *testing.T) {
 	_, _ = s.Write([]float64{math.E, math.Phi, math.Pi}, buf)
 	v, _ = s.Read(buf, reflect.TypeFor[[]float64]())
 	assert.DeepEqual(t, []float64{math.E, math.Phi, math.Pi}, v)
+
+	_, _ = s.Write([]byte{1, 2, 3, 9, 8, 7, 6}, buf)
+	v, _ = s.Read(buf, reflect.TypeFor[[]byte]())
+	assert.DeepEqual(t, []byte{1, 2, 3, 9, 8, 7, 6}, v)
 }

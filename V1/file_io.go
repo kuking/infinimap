@@ -1,10 +1,9 @@
-package impl
+package V1
 
 import (
 	"encoding/binary"
 	"errors"
 	"github.com/edsrzf/mmap-go"
-	"github.com/kuking/infinimap"
 	"os"
 	"reflect"
 )
@@ -39,7 +38,7 @@ const (
 	THOMBSTONE_OFS = 3
 )
 
-func CreateInfinimap[K comparable, V any](path string, cfg infinimap.CreateParameters) (infinimap.InfiniMap[K, V], error) {
+func Create[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K, V], error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, cfg.GetFileMode())
 	if err != nil {
 		return nil, err
@@ -64,7 +63,7 @@ func CreateInfinimap[K comparable, V any](path string, cfg infinimap.CreateParam
 		mem:         mem,
 	}
 
-	binary.LittleEndian.PutUint16(mem[OFS_FILE_VERSION:], infinimap.FILE_VERSION_1)
+	binary.LittleEndian.PutUint16(mem[OFS_FILE_VERSION:], FILE_VERSION_1)
 	mem[OFS_HASHING_ALGO] = byte(im.hashing)
 	mem[OFS_COMPRESSION_ALGO] = byte(im.compression)
 	binary.LittleEndian.PutUint32(mem[OFS_BUCKETS:], im.buckets)
@@ -78,7 +77,7 @@ func CreateInfinimap[K comparable, V any](path string, cfg infinimap.CreateParam
 	return im, nil
 }
 
-func OpenInfinimap[K comparable, V any](path string) (infinimap.InfiniMap[K, V], error) {
+func Open[K comparable, V any](path string) (InfiniMap[K, V], error) {
 
 	file, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
@@ -91,8 +90,8 @@ func OpenInfinimap[K comparable, V any](path string) (infinimap.InfiniMap[K, V],
 	}
 
 	im := &im[K, V]{
-		compression: infinimap.Compression(mem[OFS_COMPRESSION_ALGO]),
-		hashing:     infinimap.Hashing(mem[OFS_HASHING_ALGO]),
+		compression: Compression(mem[OFS_COMPRESSION_ALGO]),
+		hashing:     Hashing(mem[OFS_HASHING_ALGO]),
 		hasher:      BasicTypesHasher{},
 		seraliser:   BasicTypesSerializer{},
 		buckets:     binary.LittleEndian.Uint32(mem[OFS_BUCKETS:]),
@@ -105,8 +104,47 @@ func OpenInfinimap[K comparable, V any](path string) (infinimap.InfiniMap[K, V],
 	return im, nil
 }
 
+func OpenOrCreate[K comparable, V any](path string, cfg CreateParameters) (InfiniMap[K, V], error) {
+	if fi, err := os.Stat(path); err != nil && !fi.IsDir() {
+		return Open[K, V](path)
+	} else {
+		return Create[K, V](path, cfg)
+	}
+}
+
+func (m *im[K, V]) Shrink() error {
+	panic(errors.New("not implemented"))
+}
+
+func (m *im[K, V]) Expand() error {
+	panic(errors.New("not implemented"))
+}
+
+func (m *im[K, V]) Sync() error {
+	if err := m.mem.Flush(); err != nil {
+		return err
+	}
+	if err := m.file.Sync(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *im[K, V]) Close() error {
+	if err := m.Sync(); err != nil {
+		return err
+	}
+	if err := m.mem.Unmap(); err != nil {
+		return err
+	}
+	if err := m.file.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func assertValidIm[K comparable, V any](i *im[K, V]) {
-	if i.compression != infinimap.COMPRESSION_NONE {
+	if i.compression != COMPRESSION_NONE {
 		panic(errors.New("compression not yet implemented"))
 	}
 }
@@ -166,7 +204,7 @@ func (m *im[K, V]) isRecordForKey(ofs uint64, lo uint64, hi uint64, k K) bool {
 	if binary.LittleEndian.Uint64(m.mem[ofs+RECORD_LO_HASH:]) != lo || binary.LittleEndian.Uint64(m.mem[ofs+RECORD_HI_HASH:]) != hi {
 		return false
 	}
-	kv, err := m.seraliser.Read(m.mem[ofs+RECORD_KEY:], reflect.TypeFor[K]().Kind())
+	kv, err := m.seraliser.Read(m.mem[ofs+RECORD_KEY:], reflect.TypeFor[K]())
 	if err == nil {
 		return kv.(K) == k
 	}
@@ -174,7 +212,7 @@ func (m *im[K, V]) isRecordForKey(ofs uint64, lo uint64, hi uint64, k K) bool {
 }
 
 func (m *im[K, V]) readRecordKey(ofs uint64) (K, error) {
-	kv, err := m.seraliser.Read(m.mem[ofs+RECORD_KEY:], reflect.TypeFor[K]().Kind())
+	kv, err := m.seraliser.Read(m.mem[ofs+RECORD_KEY:], reflect.TypeFor[K]())
 	if err == nil {
 		return kv.(K), nil
 	}
@@ -183,7 +221,7 @@ func (m *im[K, V]) readRecordKey(ofs uint64) (K, error) {
 
 func (m *im[K, V]) readRecordValue(ofs uint64) (V, error) {
 	keySize := binary.LittleEndian.Uint32(m.mem[ofs+16:])
-	vv, err := m.seraliser.Read(m.mem[ofs+RECORD_VALUE+uint64(keySize):], reflect.TypeFor[V]().Kind())
+	vv, err := m.seraliser.Read(m.mem[ofs+RECORD_VALUE+uint64(keySize):], reflect.TypeFor[V]())
 	if err == nil {
 		return vv.(V), nil
 	}
@@ -216,81 +254,4 @@ func (m *im[K, V]) nextRecordOfs(ofs uint64) uint64 {
 		return ofs
 	}
 	return ofs + RECORD_VALUE + uint64(keySize) + uint64(valueSize)
-}
-
-// --------- Counters ----------------------------------------------------------------------------------------------------------------------------------------
-
-func (m *im[K, V]) getFreeNextByte() uint64 {
-	return binary.LittleEndian.Uint64(m.mem[OFS_NEXT_FREE_BYTE:])
-}
-
-func (m *im[K, V]) incFreeNextByte(size uint64) uint64 {
-	nextFreeByte := m.getFreeNextByte() + size
-	binary.LittleEndian.PutUint64(m.mem[OFS_NEXT_FREE_BYTE:], nextFreeByte)
-	return nextFreeByte
-}
-
-func (m *im[K, V]) writeFreeNextByte(next uint64) {
-	binary.LittleEndian.PutUint64(m.mem[OFS_NEXT_FREE_BYTE:], next)
-}
-
-func (m *im[K, V]) CountU64() uint64 {
-	return binary.LittleEndian.Uint64(m.mem[OFS_COUNT:])
-}
-
-func (m *im[K, V]) incCount() uint64 {
-	newCount := m.CountU64() + 1
-	binary.LittleEndian.PutUint64(m.mem[OFS_COUNT:], newCount)
-	return newCount
-}
-
-func (m *im[K, V]) decCount() uint64 {
-	newCount := m.CountU64() - 1
-	binary.LittleEndian.PutUint64(m.mem[OFS_COUNT:], newCount)
-	return newCount
-}
-
-func (m *im[K, V]) StatsInserts() uint64 {
-	return binary.LittleEndian.Uint64(m.mem[OFS_INSERTS:])
-}
-
-func (m *im[K, V]) incInserts() uint64 {
-	newCount := m.StatsInserts() + 1
-	binary.LittleEndian.PutUint64(m.mem[OFS_INSERTS:], newCount)
-	return newCount
-}
-
-func (m *im[K, V]) StatsDeletes() uint64 {
-	return binary.LittleEndian.Uint64(m.mem[OFS_DELETES:])
-}
-
-func (m *im[K, V]) incDeletes() uint64 {
-	newCount := m.StatsDeletes() + 1
-	binary.LittleEndian.PutUint64(m.mem[OFS_DELETES:], newCount)
-	return newCount
-}
-
-func (m *im[K, V]) StatsUpdates() uint64 {
-	return binary.LittleEndian.Uint64(m.mem[OFS_UPDATES:])
-}
-
-func (m *im[K, V]) incUpdates() uint64 {
-	newCount := m.StatsUpdates() + 1
-	binary.LittleEndian.PutUint64(m.mem[OFS_UPDATES:], newCount)
-	return newCount
-}
-
-func (m *im[K, V]) ClogRatio() uint8 {
-	return m.mem[OFS_CLOG_RATIO]
-}
-
-func (m *im[K, V]) resetClogRatio() {
-	m.mem[OFS_CLOG_RATIO] = 0
-}
-
-func (m *im[K, V]) updateClogRatio(visitedBuckets uint32) {
-	ratio := uint8(int64(visitedBuckets*0xff) / int64(m.buckets))
-	if m.ClogRatio() < ratio {
-		m.mem[OFS_CLOG_RATIO] = ratio
-	}
 }

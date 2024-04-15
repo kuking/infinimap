@@ -1,4 +1,4 @@
-package impl
+package V1
 
 import (
 	"encoding/binary"

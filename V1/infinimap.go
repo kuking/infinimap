@@ -1,20 +1,19 @@
-package impl
+package V1
 
 import (
 	"errors"
 	"fmt"
 	"github.com/edsrzf/mmap-go"
-	"github.com/kuking/infinimap"
 	"log"
 	"math"
 	"os"
 )
 
 type im[K comparable, V any] struct {
-	compression infinimap.Compression
-	hashing     infinimap.Hashing
-	hasher      infinimap.Hasher
-	seraliser   infinimap.Serializer
+	compression Compression
+	hashing     Hashing
+	hasher      Hasher
+	seraliser   Serializer
 	buckets     uint32
 	file        *os.File
 	mem         mmap.MMap
@@ -261,21 +260,8 @@ func (m *im[K, V]) Compact() error {
 	panic(errors.New("not implemented"))
 }
 
-func (m *im[K, V]) Sync() error {
-	panic(errors.New("not implemented"))
-}
-
-func (m *im[K, V]) Close() error {
-	if err := m.mem.Flush(); err != nil {
-		return err
-	}
-	if err := m.mem.Unmap(); err != nil {
-		return err
-	}
-	if err := m.file.Close(); err != nil {
-		return err
-	}
-	return nil
+func (m *im[K, V]) SetCustomSerializer(serializer Serializer) {
+	m.seraliser = serializer
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -287,11 +273,11 @@ func (m *im[K, V]) calBucketFromHash(lo, hi uint64) uint32 {
 }
 
 func (m *im[K, V]) resolveHash(k K) (lo uint64, hi uint64, err error) {
-	if m.hashing == infinimap.XX128_HASHING {
+	if m.hashing == XX128_HASHING {
 		if lo, hi, ok := m.hasher.XX128(k); ok {
 			return lo, hi, nil
 		}
-	} else if m.hashing == infinimap.CITY128 {
+	} else if m.hashing == CITY128 {
 		if lo, hi, ok := m.hasher.CityHash128(k); ok {
 			return lo, hi, nil
 		}

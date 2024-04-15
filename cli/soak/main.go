@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/kuking/infinimap"
-	"github.com/kuking/infinimap/impl"
-	"io/ioutil"
+	"github.com/kuking/infinimap/V1"
 	"log"
 	"math/rand"
 	"os"
@@ -21,24 +19,27 @@ func main() {
 		}
 	}
 	log.Printf("%v: soak test\n", os.Args[0])
-	log.Printf("running for %v minutes (if you want other value, just call this with a numeric parameter.)\n", mins)
-	tempFile, err := ioutil.TempFile("", "infinimap-*.db")
+	log.Printf("running for %v minute(s).\n", mins)
+	log.Println("(If you want other value, just call this with a numeric parameter.)")
+	tempFile, err := os.CreateTemp(os.TempDir(), "infinimap-*.db")
 	if err != nil {
 		fmt.Println("Error creating temp file:", err)
 		return
 	}
 	defer os.Remove(tempFile.Name()) // Clean up: delete the temporary file after the test
 
-	imap, err := impl.CreateInfinimap[uint64, string](tempFile.Name(),
-		impl.NewCreateParameters().WithCapacity(25_000_000))
+	imap, err := V1.Create[uint64, string](tempFile.Name(),
+		V1.NewCreateParameters().WithCapacity(25_000_000))
 	defer imap.Close() // Ensure the map is closed on program exit
 
 	reference := make(map[uint64]string) // Reference map to validate InfiniMap operations
+
 	soak(imap, reference, time.Duration(mins)*60*time.Second)
+
 	verify(imap, reference)
 }
 
-func verify(imap infinimap.InfiniMap[uint64, string], reference map[uint64]string) {
+func verify(imap V1.InfiniMap[uint64, string], reference map[uint64]string) {
 	ok := true
 	log.Println("Verifying contents ...")
 	for k, v := range reference {
@@ -73,24 +74,30 @@ func verify(imap infinimap.InfiniMap[uint64, string], reference map[uint64]strin
 	}
 }
 
-func soak(imap infinimap.InfiniMap[uint64, string], reference map[uint64]string, duration time.Duration) {
+func soak(imap V1.InfiniMap[uint64, string], reference map[uint64]string, duration time.Duration) {
 	ops := 0
+	insertCount := 0
 	startTime := time.Now()
 	lastLog := time.Now()
 	for time.Since(startTime) < duration {
-		doRandomOperation(imap, reference, ops)
-		ops++
+		ops, insertCount = doRandomOperation(imap, reference, ops, insertCount)
+		gets := uint64(ops) - imap.StatsDeletes() - imap.StatsInserts() - imap.StatsUpdates()
 		if time.Since(lastLog) > 15*time.Second {
 			lastLog = time.Now()
 			mill := 1_000_000.0
-			log.Printf("[%.f%%] %.2fM ops, %.2fM entries: %.2fM inserts, %.2fM updates, %.2fM deletes, %.1f%% clog\n",
+			gig := 1024.0 * 1024.0 * 1024.0
+			log.Printf("[%.f%%] %.2fM ops, %.2fM entries: %.2fM inserts, %.2fM updates, %.2fM deletes, %.2fM gets, %.1f%% clog\n",
 				float64(time.Now().Sub(startTime)*100.0/duration), float64(ops)/mill, float64(imap.Count())/mill,
-				float64(imap.StatsInserts())/mill, float64(imap.StatsUpdates())/mill, float64(imap.StatsDeletes())/mill, float32(imap.ClogRatio())/255.0)
+				float64(imap.StatsInserts())/mill, float64(imap.StatsUpdates())/mill, float64(imap.StatsDeletes())/mill, float64(gets)/mill,
+				float32(imap.ClogRatio())/255.0)
+			log.Printf("  ... disk space: %.1fG allocated, %.1fG in use, %.1fG reclaimable, %.1fG available\n",
+				float64(imap.BytesAllocated())/gig, float64(imap.BytesInUse())/gig, float64(imap.BytesReclaimable())/gig, float64(imap.BytesAvailable())/gig)
+
 		}
 	}
 }
 
-func doRandomOperation(imap infinimap.InfiniMap[uint64, string], reference map[uint64]string, ops int) {
+func doRandomOperation(imap V1.InfiniMap[uint64, string], reference map[uint64]string, ops int, insertCount int) (int, int) {
 	operation := rand.Intn(4)
 	if imap.Count() < 1_000_000 {
 		operation = 0 // insert!
@@ -99,7 +106,7 @@ func doRandomOperation(imap infinimap.InfiniMap[uint64, string], reference map[u
 	}
 	switch operation {
 	case 0: // Insert
-		key := uint64(ops)
+		key := uint64(insertCount)
 		if _, exist := reference[key]; !exist {
 			value := fmt.Sprintf("Value %d", key)
 			reference[key] = value
@@ -107,32 +114,38 @@ func doRandomOperation(imap infinimap.InfiniMap[uint64, string], reference map[u
 			if err != nil {
 				log.Fatalln(err)
 			}
+			insertCount++
+			ops++
 		}
 	case 1: // Update
-		key := uint64(rand.Intn(ops))
+		key := uint64(rand.Intn(insertCount))
 		oldRef, found := reference[key]
-		value := fmt.Sprintf("Value %d Updated with rand %d", key, rand.Int())
-		reference[key] = value
-		oldImap, replaced, err := imap.Put(key, value)
-		if replaced != found {
-			log.Println("BUG? it did not replaced the key:", key)
-		}
-		if oldRef != oldImap {
-			log.Println("BUG? old value replaced:", oldRef, "do not match with imap old value:", oldImap)
-		}
-		if err != nil {
-			log.Fatalln(err)
+		if found {
+			value := fmt.Sprintf("Value %d Updated with rand %d", key, rand.Int())
+			reference[key] = value
+			oldImap, replaced, err := imap.Put(key, value)
+			if replaced != found {
+				log.Println("BUG? it did not replaced the key:", key)
+			}
+			if oldRef != oldImap {
+				log.Println("BUG? old value replaced:", oldRef, "do not match with imap old value:", oldImap)
+			}
+			if err != nil {
+				log.Fatalln(err)
+			}
+			ops++
 		}
 	case 2: // Delete
-		key := uint64(rand.Intn(ops))
+		key := uint64(rand.Intn(insertCount))
 		if _, found := reference[key]; found {
 			delete(reference, key)
 			if !imap.Delete(key) {
 				log.Println("BUG? it did not delete the key:", key)
 			}
+			ops++
 		}
 	case 3: // Get
-		key := uint64(rand.Intn(ops))
+		key := uint64(rand.Intn(insertCount))
 		refValue, refFound := reference[key]
 		imapValue, imapFound := imap.Get(key)
 		if refFound != imapFound {
@@ -141,5 +154,7 @@ func doRandomOperation(imap infinimap.InfiniMap[uint64, string], reference map[u
 		if refFound && imapFound && refValue != imapValue {
 			log.Println("BUG! the expected value was:", refValue, "but we found:", imapValue)
 		}
+		ops++
 	}
+	return ops, insertCount
 }

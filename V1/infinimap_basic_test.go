@@ -1,8 +1,7 @@
-package impl
+package V1
 
 import (
 	"fmt"
-	"github.com/kuking/infinimap"
 	"github.com/zeebo/assert"
 	"log"
 	"math/rand"
@@ -16,7 +15,7 @@ func TestHappyPath(t *testing.T) {
 	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
 	defer deferredCleanup(tempFile)
 
-	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters())
+	imap, err := Create[uint64, string](tempFile.Name(), NewCreateParameters())
 	assert.NoError(t, err)
 
 	previous, replaced, err := imap.Put(1, "Uno")
@@ -76,7 +75,7 @@ func TestCounters(t *testing.T) {
 	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
 	defer deferredCleanup(tempFile)
 
-	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(10))
+	imap, err := Create[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(10))
 	assert.NoError(t, err)
 
 	assert.Equal(t, 0, imap.Count())
@@ -125,7 +124,7 @@ func TestBasicDrill(t *testing.T) {
 
 	records := uint64(1_000_000)
 
-	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(int(records*10)))
+	imap, err := Create[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(int(records*10)))
 	assert.NoError(t, err)
 
 	t0 := time.Now()
@@ -172,7 +171,7 @@ func TestBasicCollisionsAndReindexing(t *testing.T) {
 	tempFile, _ := os.CreateTemp(os.TempDir(), "infinimap")
 	defer deferredCleanup(tempFile)
 
-	imap, err := CreateInfinimap[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(1000))
+	imap, err := Create[uint64, string](tempFile.Name(), NewCreateParameters().WithCapacity(1000))
 	assert.NoError(t, err)
 
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -250,7 +249,7 @@ func TestBasicCollisionsAndReindexing(t *testing.T) {
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-func getKeys[K comparable, V any](imap infinimap.InfiniMap[K, V]) []K {
+func getKeys[K comparable, V any](imap InfiniMap[K, V]) []K {
 	var res []K
 	for key := range imap.Keys() {
 		res = append(res, key)
@@ -258,7 +257,7 @@ func getKeys[K comparable, V any](imap infinimap.InfiniMap[K, V]) []K {
 	return res
 }
 
-func getValues[K comparable, V any](imap infinimap.InfiniMap[K, V]) []V {
+func getValues[K comparable, V any](imap InfiniMap[K, V]) []V {
 	var res []V
 	for value := range imap.Values() {
 		res = append(res, value)

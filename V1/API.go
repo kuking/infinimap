@@ -1,4 +1,4 @@
-package infinimap
+package V1
 
 import (
 	"os"
@@ -6,6 +6,9 @@ import (
 )
 
 type InfiniMap[K comparable, V any] interface {
+	/*
+		Fundamental API
+	*/
 	Put(K, V) (previous V, replace bool, err error)
 	Get(K) (value V, found bool)
 	Delete(K) (deleted bool)
@@ -14,17 +17,37 @@ type InfiniMap[K comparable, V any] interface {
 	Values() <-chan V
 	Each(func(K, V) (cont bool)) error
 
+	/*
+		Map Statistics
+	*/
 	StatsInserts() uint64
 	StatsDeletes() uint64
 	StatsUpdates() uint64
-
 	CountU64() uint64
+
+	/*
+		Index Maintenance
+	*/
 	ClogRatio() uint8
 	Reindex() error
 
-	Compact() error
+	/*
+		Space maintenance
+	*/
+	//Compact(CompactParameters) error
+	Shrink() error
+	Expand() error
+	BytesAllocated() uint64
+	BytesInUse() uint64
+	BytesReclaimable() uint64
+	BytesAvailable() uint64
+
+	/*
+		IO Closing, misc
+	*/
 	Sync() error
 	Close() error
+	SetCustomSerializer(Serializer)
 }
 
 type Hasher interface {
@@ -34,7 +57,7 @@ type Hasher interface {
 
 type Serializer interface {
 	Write(interface{}, []byte) (int, error)
-	Read([]byte, reflect.Kind) (interface{}, error)
+	Read([]byte, reflect.Type) (interface{}, error)
 }
 
 type Compression uint8
@@ -63,4 +86,9 @@ type CreateParameters interface {
 	GetCompression() Compression
 	WithHashing(Hashing) CreateParameters
 	GetHashing() Hashing
+}
+
+type CompactParameters interface {
+	WithMinimumCapacity(bool) CompactParameters
+	WithMinimumFileSize(bool) CompactParameters
 }

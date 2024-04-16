@@ -74,7 +74,7 @@ func NewCreateParameters() CreateParameters {
 		fileMode:    0644,
 		concurrency: false,
 		compression: COMPRESSION_NONE,
-		hashing:     XX128_HASHING,
+		hashing:     HASH_XX128,
 	}
 }
 

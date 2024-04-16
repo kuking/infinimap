@@ -51,8 +51,10 @@ type Map[K comparable, V any] interface {
 }
 
 type Hasher interface {
+	XX64(interface{}) (hash uint64, ok bool)
 	XX128(interface{}) (low, high uint64, ok bool)
-	CityHash128(interface{}) (low, high uint64, ok bool)
+	City64(interface{}) (hash uint64, ok bool)
+	City128(interface{}) (low, high uint64, ok bool)
 }
 
 type Serializer interface {
@@ -67,8 +69,10 @@ const (
 	COMPRESSION_NONE Compression = 0
 	LZ4_COMPRESSION  Compression = 1
 
-	XX128_HASHING Hashing = 1
-	CITY128       Hashing = 2
+	HASH_XX64    Hashing = 3
+	HASH_XX128   Hashing = 1
+	HASH_CITY64  Hashing = 4
+	HASH_CITY128 Hashing = 2
 
 	FILE_VERSION_1 uint16 = 0x1f17
 )

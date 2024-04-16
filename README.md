@@ -127,6 +127,10 @@ All numbers are stored in little endian.
 There is a soak tests that exercises the infinimap against a reference map (a golang one) and checks for consistency, more details here: [SOAK.md](SOAK.md), the
 implementation is in the file `cli/soak/main.go`.
 
+## Benchmarks
+
+There are some benchmark results here: [BENCHMARK.md](BENCHMARK.md).
+
 ## TODO
 
 - explain why infinimap is better than https://github.com/peterbourgon/diskv

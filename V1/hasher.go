@@ -43,6 +43,14 @@ func (n BasicTypesHasher) bytesOfThis(v interface{}) []byte {
 	return b
 }
 
+func (n BasicTypesHasher) XX64(v interface{}) (hash uint64, ok bool) {
+	b := n.bytesOfThis(v)
+	if b != nil {
+		return xxh3.Hash(b), true
+	}
+	return 0, false
+}
+
 func (n BasicTypesHasher) XX128(v interface{}) (low, high uint64, ok bool) {
 	b := n.bytesOfThis(v)
 	if b != nil {
@@ -52,7 +60,15 @@ func (n BasicTypesHasher) XX128(v interface{}) (low, high uint64, ok bool) {
 	return 0, 0, false
 }
 
-func (n BasicTypesHasher) CityHash128(v interface{}) (low, high uint64, ok bool) {
+func (n BasicTypesHasher) City64(v interface{}) (hash uint64, ok bool) {
+	b := n.bytesOfThis(v)
+	if b != nil {
+		return city.CH64(b), true
+	}
+	return 0, false
+}
+
+func (n BasicTypesHasher) City128(v interface{}) (low, high uint64, ok bool) {
 	b := n.bytesOfThis(v)
 	if b != nil {
 		h := city.CH128(b)

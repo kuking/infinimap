@@ -271,13 +271,21 @@ func (m *im[K, V]) calBucketFromHash(lo, hi uint64) uint32 {
 }
 
 func (m *im[K, V]) resolveHash(k K) (lo uint64, hi uint64, err error) {
-	if m.hashing == XX128_HASHING {
+	if m.hashing == HASH_XX128 {
 		if lo, hi, ok := m.hasher.XX128(k); ok {
 			return lo, hi, nil
 		}
-	} else if m.hashing == CITY128 {
-		if lo, hi, ok := m.hasher.CityHash128(k); ok {
+	} else if m.hashing == HASH_CITY128 {
+		if lo, hi, ok := m.hasher.City128(k); ok {
 			return lo, hi, nil
+		}
+	} else if m.hashing == HASH_XX64 {
+		if h, ok := m.hasher.XX64(k); ok {
+			return h, h, nil
+		}
+	} else if m.hashing == HASH_CITY64 {
+		if h, ok := m.hasher.City64(k); ok {
+			return h, h, nil
 		}
 	}
 	return 0, 0, errors.New(fmt.Sprintf("hasher type unimplemented: %v", m.hashing))

@@ -5,7 +5,7 @@ Scale to Hundreds of Terabytes with This Efficient, Memory-like Speed, Persisten
 ## Overview
 
 InfiniMap is a high-performance, disk-persistent map (`InfiniMap[K comparable, V any]`) optimized for storing large datasets efficiently. It leverages many
-strengths of the operating system internals, it uses zero-copy techniques and memory-mapped files; in practise you can operate with the speed of in-memory 
+strengths of the operating system internals, it uses zero-copy techniques and memory-mapped files; in practise you can operate with the speed of in-memory
 databases while maintaining the data in disk, and not having to user any process memory as cache.
 
 There is no IO operations required, but to: Create, Open & Close.
@@ -39,7 +39,7 @@ If you do a lot of deletes and updates, you will have to do a `Compact(CompactPa
 for you), in order to decide when to reclaim deleted space, you can use the APIs `BytesReclaimable() uint64`, `BytesInUse() uint64` `BytesAvailable() uint64`.
 
 If you have added way too may entries going above the initial Capacity (`WithCapacity(int) CreateParameters`) the index might start to clog, and it will be
-detrimental to the overall performance; you can checl `ClogRatio() uint8` and run `Reindex() error`. 
+detrimental to the overall performance; you can checl `ClogRatio() uint8` and run `Reindex() error`.
 
 ### Files sizes vs occupied space
 
@@ -57,7 +57,7 @@ Given the map files are going to be big (i.e. 16TiB), if you want to ship a map 
 Once deployed, if you are planning to keep adding data you can `Expand()` to give it space to write. But it is not necessary if it is going to be just a
 lookup, read-only map.
 
-`Shrink()` and `Expand()` operations are instant. 
+`Shrink()` and `Expand()` operations are instant.
 
 You can still compress a 16TB of 'zeroes' which end up in almost a tiny gzipped tar, but it will take time, and upon decompress, and here you get into the
 nitty-gritty details of each filesystem implementation, it might actually allocate space for all those zeros. So, better to do shrink & expand for shipping.
@@ -68,17 +68,16 @@ any new entry or update (Delete is OK). Until you `Expand()` the infinimap again
 ## Serializer
 
 Data is ultimately stored in disk, therefore it has to be serialised in a consistent way, i.e. if you take a map from a little endian machine (intel/arm) and
-open it in a big endian computer, it should work. All basic data-types are serialised in the file `serializer.go` using little endian (the most common 
-endianness).  If you want to implement or extend the default serializer, you can set it the API constructor parameter `SetCustomSerializer(Serializer)`
+open it in a big endian computer, it should work. All basic data-types are serialised in the file `serializer.go` using little endian (the most common
+endianness). If you want to implement or extend the default serializer, you can set it the API constructor parameter `SetCustomSerializer(Serializer)`
 
-Types supported, all the basic types: `int8`, `uint8`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, `float64`, `string`, `bool`.
-Slices of fixed sized types are supported (basically everything but array of strings, but a string is OK.
+The default serializer has a **fast and slow mode**. For basic data types, it will work fast using basic binary encoding, given the maps are defined with
+the type upfront, we know what to expect in the encoded data, so no metadata is required. When the object trying to be serialised does not fit into the default
+basic ones, i.e. a struct, or a map of some types, it will use `binary.gob` which is quite potent, but slow given it requires to describe its contents, use
+metadata, allocate parsers, objects, etc.
 
-If you want to store complex objects, either write your own custom serializer or store it in a JSON, gob, etc.
-
-## Data Structure
-
-All numbers are stored in little endian.
+The fast basic types supported are: `int8`, `uint8`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`, `float32`, `float64`, `string`, `bool`.
+Then it defaults to use `binary.gob`, which is relatively slower compared to primitive encodings.
 
 ### High level format
 

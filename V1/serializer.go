@@ -3,17 +3,17 @@ package V1
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"math"
 	"reflect"
 )
 
-type BasicTypesSerializer struct{}
+type FastAndSlowSerializer struct{}
 
 // the explicit converts at the beginning are for speed purposes, you don't want to create multiple objects just for parsing an uint64, if there is no specific
-// function to write/read, it will use the  default which is binary.write/read, slower due to readers/writers/reflection, etc...
-// ... but might be the best of worst worlds if using complex types
+// function to write/read, it will default to binary.gob, which is good, but slower.
 
-func (_ BasicTypesSerializer) Write(v interface{}, dst []byte) (int, error) {
+func (_ FastAndSlowSerializer) Write(v interface{}, dst []byte) (int, error) {
 	switch v.(type) {
 	case bool:
 		if v.(bool) {
@@ -61,21 +61,15 @@ func (_ BasicTypesSerializer) Write(v interface{}, dst []byte) (int, error) {
 		size := uint32(len(v.([]byte)))
 		binary.LittleEndian.PutUint32(dst[:], size)
 		return copy(dst[4:], v.([]byte)) + 4, nil
-	default: // slow
+	default: // slow gob
 		bw := bytes.NewBuffer(dst[:0])
-		// writes the slice length, if it is a slice
-		val := reflect.ValueOf(v)
-		if val.Kind() == reflect.Slice {
-			if err := binary.Write(bw, binary.LittleEndian, int32(val.Len())); err != nil {
-				return 0, err
-			}
-		}
-		err := binary.Write(bw, binary.LittleEndian, v)
+		encoder := gob.NewEncoder(bw)
+		err := encoder.Encode(v)
 		return bw.Len(), err
 	}
 }
 
-func (_ BasicTypesSerializer) Read(dst []byte, k reflect.Type) (interface{}, error) {
+func (_ FastAndSlowSerializer) Read(dst []byte, k reflect.Type) (interface{}, error) {
 	switch k.Kind() {
 	case reflect.Int8:
 		return int8(dst[0]), nil
@@ -102,20 +96,11 @@ func (_ BasicTypesSerializer) Read(dst []byte, k reflect.Type) (interface{}, err
 	case reflect.String:
 		size := binary.LittleEndian.Uint32(dst)
 		return string(dst[4 : size+4]), nil
-	default: // slow
+	default: // slow gob
+		v := reflect.New(k)
 		r := bytes.NewReader(dst)
-		var dest reflect.Value
-		var length int32
-		if k.Kind() == reflect.Slice {
-			// First read the length if it's a slice
-			if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
-				return nil, err
-			}
-			dest = reflect.MakeSlice(k, int(length), int(length))
-		} else {
-			dest = reflect.New(k).Elem()
-		}
-		err := binary.Read(r, binary.LittleEndian, dest.Interface())
-		return dest.Interface(), err
+		decoder := gob.NewDecoder(r)
+		err := decoder.Decode(v.Interface())
+		return v.Interface(), err
 	}
 }

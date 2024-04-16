@@ -8,7 +8,7 @@ import (
 )
 
 func TestSerializer(t *testing.T) {
-	s := BasicTypesSerializer{}
+	s := FastAndSlowSerializer{}
 	buf := make([]byte, 64)
 
 	// Testing boolean
@@ -74,7 +74,7 @@ func TestSerializer(t *testing.T) {
 }
 
 func TestSerializerUnboundedShouldFail(t *testing.T) {
-	s := BasicTypesSerializer{}
+	s := FastAndSlowSerializer{}
 	buf := make([]byte, 64)
 
 	_, err := s.Write(12345, buf)
@@ -85,7 +85,7 @@ func TestSerializerUnboundedShouldFail(t *testing.T) {
 }
 
 func TestSerializerArray(t *testing.T) {
-	s := BasicTypesSerializer{}
+	s := FastAndSlowSerializer{}
 	buf := make([]byte, 64)
 
 	_, _ = s.Write([]int16{1, 2, 3, 4}, buf)
@@ -102,4 +102,15 @@ func TestSerializerArray(t *testing.T) {
 	_, _ = s.Write([]byte{1, 2, 3, 9, 8, 7, 6}, buf)
 	v, _ = s.Read(buf, reflect.TypeFor[[]byte]())
 	assert.DeepEqual(t, []byte{1, 2, 3, 9, 8, 7, 6}, v)
+}
+
+func TestSerialiseMap(t *testing.T) {
+	s := FastAndSlowSerializer{}
+	buf := make([]byte, 128)
+
+	m := map[string]string{"Hello": "World", "123": "one hundred and twenty three"}
+	_, _ = s.Write(m, buf)
+
+	v, _ := s.Read(buf, reflect.TypeFor[map[string]string]())
+	assert.DeepEqual(t, &m, v)
 }

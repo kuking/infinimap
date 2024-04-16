@@ -58,7 +58,7 @@ func Create[K comparable, V any](path string, cfg CreateParameters) (Map[K, V], 
 		compression: cfg.GetCompression(),
 		hashing:     cfg.GetHashing(),
 		hasher:      BasicTypesHasher{},
-		seraliser:   BasicTypesSerializer{},
+		seraliser:   FastAndSlowSerializer{},
 		buckets:     uint32(cfg.GetCapacity()) * 2, // twice the amount of buckets as expected capacity
 		path:        path,
 		file:        file,
@@ -83,7 +83,7 @@ func Create[K comparable, V any](path string, cfg CreateParameters) (Map[K, V], 
 func Open[K comparable, V any](path string) (Map[K, V], error) {
 	im := &im[K, V]{
 		hasher:    BasicTypesHasher{},
-		seraliser: BasicTypesSerializer{},
+		seraliser: FastAndSlowSerializer{},
 		path:      path,
 	}
 	if err := im.internalOpen(); err != nil {

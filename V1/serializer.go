@@ -53,10 +53,10 @@ func (_ FastAndSlowSerializer) Write(v interface{}, dst []byte) (int, error) {
 		binary.LittleEndian.PutUint64(dst, math.Float64bits(v.(float64)))
 		return 8, nil
 	case string:
-		bytes := []byte(v.(string))
-		size := uint32(len(bytes))
+		bs := []byte(v.(string))
+		size := uint32(len(bs))
 		binary.LittleEndian.PutUint32(dst[:], size)
-		return copy(dst[4:], bytes) + 4, nil
+		return copy(dst[4:], bs) + 4, nil
 	case []byte:
 		size := uint32(len(v.([]byte)))
 		binary.LittleEndian.PutUint32(dst[:], size)
@@ -96,7 +96,12 @@ func (_ FastAndSlowSerializer) Read(dst []byte, k reflect.Type) (interface{}, er
 	case reflect.String:
 		size := binary.LittleEndian.Uint32(dst)
 		return string(dst[4 : size+4]), nil
-	default: // slow gob
+	default:
+		if k.Kind() == reflect.Slice && k.Elem().Kind() == reflect.Uint8 {
+			size := binary.LittleEndian.Uint32(dst)
+			return dst[4 : 4+size], nil
+		}
+		// slow gob
 		v := reflect.New(k)
 		r := bytes.NewReader(dst)
 		decoder := gob.NewDecoder(r)

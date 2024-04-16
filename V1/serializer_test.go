@@ -114,3 +114,14 @@ func TestSerialiseMap(t *testing.T) {
 	v, _ := s.Read(buf, reflect.TypeFor[map[string]string]())
 	assert.DeepEqual(t, &m, v)
 }
+
+func TestSerialiseByteArray(t *testing.T) {
+	s := FastAndSlowSerializer{}
+	buf := make([]byte, 64)
+
+	m := []byte{3, 1, 4, 1, 5}
+	_, _ = s.Write(m, buf)
+
+	v, _ := s.Read(buf, reflect.TypeFor[[]byte]())
+	assert.Equal(t, m, v)
+}
